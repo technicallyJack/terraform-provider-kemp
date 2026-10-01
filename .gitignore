@@ -1,0 +1,9 @@
+/terraform-provider-kemp
+dist/
+*.exe
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
