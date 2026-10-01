@@ -23,8 +23,8 @@ testacc:
 sweep:
 	go test ./internal/provider -v -sweep=loadmaster -timeout 10m
 
-# Retried once: on NFS, files held open (e.g. by an editor) can make the
-# docs directory cleanup fail transiently.
+# Retried once: on NFS with stale directory listings, tfplugindocs can miss
+# a file while cleaning docs/ and then fail to remove the directory.
 generate:
 	go tool tfplugindocs generate --provider-name kemp || go tool tfplugindocs generate --provider-name kemp
 
