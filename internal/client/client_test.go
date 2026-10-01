@@ -3,8 +3,10 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -47,5 +49,79 @@ func TestAPIError(t *testing.T) {
 	apiErr, ok := err.(*APIError)
 	if !ok || apiErr.Code != 401 {
 		t.Fatalf("expected 401 APIError, got %v", err)
+	}
+}
+
+func TestHTMLErrorPages(t *testing.T) {
+	for _, tc := range []struct {
+		status int
+		want   string
+	}{
+		{http.StatusUnauthorized, "authentication failed"},
+		{http.StatusNotFound, "API interface is enabled"},
+	} {
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(tc.status)
+			_, _ = w.Write([]byte(`<!DOCTYPE html><HTML><BODY>error</BODY></HTML>`))
+		}))
+
+		c, _ := New(Config{Host: srv.URL, APIKey: "k", Insecure: true})
+		err := c.Do(context.Background(), "listvs", nil, nil)
+		var apiErr *APIError
+		if !errors.As(err, &apiErr) || apiErr.Code != tc.status || !strings.Contains(apiErr.Message, tc.want) {
+			t.Errorf("HTTP %d: got %v", tc.status, err)
+		}
+		srv.Close()
+	}
+}
+
+func TestIsNotFound(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"code":422,"message":"Unknown VS","status":"fail"}`))
+	}))
+	defer srv.Close()
+
+	c, _ := New(Config{Host: srv.URL, APIKey: "k", Insecure: true})
+	_, err := c.GetVirtualService(context.Background(), 999)
+	if !IsNotFound(err) {
+		t.Fatalf("expected not found, got %v", err)
+	}
+	if IsNotFound(&APIError{Code: 422, Message: "Invalid port"}) {
+		t.Fatal("validation error should not count as not found")
+	}
+}
+
+func TestVirtualServiceRequestParams(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = nil
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_, _ = w.Write([]byte(`{"code":200,"status":"ok","Index":7,"VSAddress":"10.0.0.5","VSPort":"80","Protocol":"tcp","NickName":"t","Enable":true,"VStype":"gen"}`))
+	}))
+	defer srv.Close()
+
+	c, _ := New(Config{Host: srv.URL, APIKey: "k", Insecure: true})
+	str := func(s string) *string { return &s }
+	enable := true
+
+	vs, err := c.CreateVirtualService(context.Background(), VirtualServiceParams{
+		Address: str("10.0.0.5"), Port: str("80"), Protocol: str("tcp"), NickName: str("t"), Enable: &enable, VSType: str("gen"),
+	})
+	if err != nil || vs.Index != 7 {
+		t.Fatalf("create: %v %+v", err, vs)
+	}
+	for k, v := range map[string]any{"cmd": "addvs", "vs": "10.0.0.5", "port": "80", "prot": "tcp", "NickName": "t", "Enable": true, "VStype": "gen"} {
+		if got[k] != v {
+			t.Errorf("addvs %s = %v, want %v", k, got[k], v)
+		}
+	}
+
+	if _, err := c.UpdateVirtualService(context.Background(), 7, VirtualServiceParams{Address: str("10.0.0.6"), Port: str("81")}); err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range map[string]any{"cmd": "modvs", "vs": "7", "VSAddress": "10.0.0.6", "VSPort": "81"} {
+		if got[k] != v {
+			t.Errorf("modvs %s = %v, want %v", k, got[k], v)
+		}
 	}
 }

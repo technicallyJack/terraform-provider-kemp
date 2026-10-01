@@ -37,6 +37,8 @@ type virtualServiceModel struct {
 	Protocol types.String `tfsdk:"protocol"`
 	Status   types.String `tfsdk:"status"`
 	Enabled  types.Bool   `tfsdk:"enabled"`
+	Type     types.String `tfsdk:"type"`
+	Parent   types.Int64  `tfsdk:"parent_index"`
 }
 
 func (d *virtualServicesDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -58,6 +60,11 @@ func (d *virtualServicesDataSource) Schema(_ context.Context, _ datasource.Schem
 						"protocol": schema.StringAttribute{Computed: true},
 						"status":   schema.StringAttribute{Computed: true},
 						"enabled":  schema.BoolAttribute{Computed: true},
+						"type":     schema.StringAttribute{Computed: true, Description: "Service type (gen, http, http2, ts, tls, log)."},
+						"parent_index": schema.Int64Attribute{
+							Computed:    true,
+							Description: "Index of the parent virtual service if this is a SubVS, otherwise 0.",
+						},
 					},
 				},
 			},
@@ -95,6 +102,8 @@ func (d *virtualServicesDataSource) Read(ctx context.Context, _ datasource.ReadR
 			Protocol: types.StringValue(vs.Protocol),
 			Status:   types.StringValue(vs.Status),
 			Enabled:  types.BoolValue(vs.Enable),
+			Type:     types.StringValue(vs.VSType),
+			Parent:   types.Int64Value(int64(vs.MasterVSID)),
 		})
 	}
 

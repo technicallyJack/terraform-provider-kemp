@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -74,6 +75,14 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("loadmaster API error (code %d): %s", e.Code, e.Message)
 }
 
+// IsNotFound reports whether err is the LoadMaster's response for an object
+// that doesn't exist (code 422, e.g. "Unknown VS").
+func IsNotFound(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.Code == http.StatusUnprocessableEntity &&
+		strings.HasPrefix(strings.ToLower(apiErr.Message), "unknown")
+}
+
 // baseResponse holds the fields common to every accessv2 response.
 type baseResponse struct {
 	Code    int    `json:"code"`
@@ -120,6 +129,13 @@ func (c *Client) Do(ctx context.Context, cmd string, params map[string]any, out 
 
 	var base baseResponse
 	if err := json.Unmarshal(raw, &base); err != nil {
+		// Auth failures and a disabled API interface return HTML pages, not JSON.
+		switch resp.StatusCode {
+		case http.StatusUnauthorized:
+			return &APIError{Code: resp.StatusCode, Message: "authentication failed: check api_key or username/password"}
+		case http.StatusNotFound:
+			return &APIError{Code: resp.StatusCode, Message: "API not found: check that the API interface is enabled (Certificates & Security > Remote Access)"}
+		}
 		return fmt.Errorf("decoding %s response (HTTP %d): %w", cmd, resp.StatusCode, err)
 	}
 	if base.Code != http.StatusOK || !strings.EqualFold(base.Status, "ok") {

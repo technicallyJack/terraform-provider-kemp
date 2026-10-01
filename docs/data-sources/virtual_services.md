@@ -36,6 +36,8 @@ Read-Only:
 - `enabled` (Boolean)
 - `index` (Number) LoadMaster-assigned virtual service index.
 - `nickname` (String)
+- `parent_index` (Number) Index of the parent virtual service if this is a SubVS, otherwise 0.
 - `port` (String)
 - `protocol` (String)
 - `status` (String)
+- `type` (String) Service type (gen, http, http2, ts, tls, log).

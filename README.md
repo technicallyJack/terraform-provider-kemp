@@ -54,3 +54,12 @@ Then run `make install` and use `terraform plan` (skip `terraform init`) in any 
 ## Data sources
 
 - `kemp_virtual_services`: lists all virtual services
+
+## Resources
+
+- `kemp_virtual_service`: manages a virtual service (address, port, protocol, nickname, enabled, type)
+
+## Acceptance tests
+
+Set `KEMP_HOST`, `KEMP_API_KEY` (or username/password) and `KEMP_INSECURE` as needed, then `make testacc`.
+Resource tests also need `KEMP_TEST_VS_ADDRESS`: an unused IP the LoadMaster can claim. They are skipped without it.
