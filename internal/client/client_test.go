@@ -125,3 +125,43 @@ func TestVirtualServiceRequestParams(t *testing.T) {
 		}
 	}
 }
+
+func TestRealServerRequestParams(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = nil
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		if got["cmd"] == "modrs" {
+			_, _ = w.Write([]byte(`{"code":200,"message":"Command completed ok","status":"ok"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"code":200,"status":"ok","Rs":[{"VSIndex":4,"RsIndex":8,"Addr":"10.0.254.250","Port":18080,"Forward":"nat","Weight":1000,"Limit":0,"Enable":true}]}`))
+	}))
+	defer srv.Close()
+
+	c, _ := New(Config{Host: srv.URL, APIKey: "k", Insecure: true})
+
+	rs, err := c.CreateRealServer(context.Background(), 4, "10.0.254.250", 18080)
+	if err != nil || rs.RsIndex != 8 || rs.Port != 18080 {
+		t.Fatalf("create: %v %+v", err, rs)
+	}
+	for k, v := range map[string]any{"cmd": "addrs", "vs": "4", "rs": "10.0.254.250", "rsport": "18080"} {
+		if got[k] != v {
+			t.Errorf("addrs %s = %v, want %v", k, got[k], v)
+		}
+	}
+
+	port, weight, fwd := 18081, 200, "route"
+	if err := c.UpdateRealServer(context.Background(), 4, 8, RealServerParams{Port: &port, Weight: &weight, Forward: &fwd}); err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range map[string]any{"cmd": "modrs", "vs": "4", "rs": "!8", "NewPort": "18081", "Weight": "200", "Forward": "route"} {
+		if got[k] != v {
+			t.Errorf("modrs %s = %v, want %v", k, got[k], v)
+		}
+	}
+
+	if _, err := c.GetRealServer(context.Background(), 4, 8); err != nil || got["cmd"] != "showrs" || got["rs"] != "!8" {
+		t.Fatalf("showrs: %v %v", err, got)
+	}
+}

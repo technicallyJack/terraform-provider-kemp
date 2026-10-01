@@ -58,8 +58,10 @@ Then run `make install` and use `terraform plan` (skip `terraform init`) in any 
 ## Resources
 
 - `kemp_virtual_service`: manages a virtual service (address, port, protocol, nickname, enabled, type)
+- `kemp_real_server`: manages a real server on a virtual service (address, port, forward, weight, limit, enabled)
 
 ## Acceptance tests
 
 Set `KEMP_HOST`, `KEMP_API_KEY` (or username/password) and `KEMP_INSECURE` as needed, then `make testacc`.
 Resource tests also need `KEMP_TEST_VS_ADDRESS`: an unused IP the LoadMaster can claim. They are skipped without it.
+Real server tests point backends at `KEMP_TEST_RS_ADDRESS` and the next address up (default `10.0.254.250`/`.251`); those only receive health checks.

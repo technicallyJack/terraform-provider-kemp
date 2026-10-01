@@ -138,6 +138,7 @@ func (p *kempProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 func (p *kempProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewVirtualServiceResource,
+		NewRealServerResource,
 	}
 }
 
