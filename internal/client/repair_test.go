@@ -51,3 +51,18 @@ func TestDoRepairsBrokenResponse(t *testing.T) {
 		t.Fatalf("got %+v, %v", vs, err)
 	}
 }
+
+func TestRepairJSONEmptyRuleList(t *testing.T) {
+	// showrule with no rules on the LoadMaster, as sent.
+	raw := "{ \"code\": 200,\r\n,\r\n  \"status\": \"ok\"\r\n}\r\n"
+	if json.Valid([]byte(raw)) {
+		t.Fatal("fixture should reproduce the firmware bug")
+	}
+	var got struct {
+		Code   int    `json:"code"`
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(repairJSON([]byte(raw)), &got); err != nil || got.Code != 200 || got.Status != "ok" {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+}

@@ -16,9 +16,15 @@ import "regexp"
 var misplacedPreProcessField = regexp.MustCompile(
 	`("PreProcessRules"\s*:\s*\[(?:\s*"[^"]*"\s*,)*\s*"[^"]*")\s*("[^"]+"\s*:\s*[^,\[\]{}\r\n]+?)\s*,\s*\]`)
 
+// emptyListComma matches another firmware bug: showrule with no rules on the
+// LoadMaster returns `{ "code": 200, , "status": "ok" }`, with an empty
+// member between two commas.
+var emptyListComma = regexp.MustCompile(`("code"\s*:\s*\d+\s*),\s*,`)
+
 // repairJSON fixes known firmware JSON bugs. It is only applied to responses
 // that are not valid JSON, so well-formed responses are never rewritten.
 func repairJSON(raw []byte) []byte {
 	// Close the array after its last element and move the field out after it.
-	return misplacedPreProcessField.ReplaceAll(raw, []byte("$1 ], $2"))
+	raw = misplacedPreProcessField.ReplaceAll(raw, []byte("$1 ], $2"))
+	return emptyListComma.ReplaceAll(raw, []byte("$1,"))
 }
