@@ -165,3 +165,32 @@ func TestRealServerRequestParams(t *testing.T) {
 		t.Fatalf("showrs: %v %v", err, got)
 	}
 }
+
+func TestCreateSubVirtualServiceFindsNewSlot(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		switch {
+		case body["cmd"] == "showvs":
+			_, _ = w.Write([]byte(`{"code":200,"status":"ok","Index":4,"SubVS":[{"VSIndex":5,"RsIndex":8}]}`))
+		case body["cmd"] == "modvs" && body["CreateSubVS"] == "1":
+			_, _ = w.Write([]byte(`{"code":200,"status":"ok","Index":4,"SubVS":[{"VSIndex":5,"RsIndex":8},{"VSIndex":6,"RsIndex":9,"Weight":1000,"Enable":true}]}`))
+		default:
+			t.Errorf("unexpected request %v", body)
+		}
+	}))
+	defer srv.Close()
+
+	c, _ := New(Config{Host: srv.URL, APIKey: "k", Insecure: true})
+	slot, err := c.CreateSubVirtualService(context.Background(), 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slot.VSIndex != 6 || slot.RsIndex != 9 {
+		t.Fatalf("got %+v, want VSIndex 6 / RsIndex 9", slot)
+	}
+
+	if _, err := c.GetSubVSSlot(context.Background(), 4, 99); !IsNotFound(err) {
+		t.Fatalf("expected not found for missing SubVS, got %v", err)
+	}
+}

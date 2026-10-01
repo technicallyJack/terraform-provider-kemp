@@ -3,16 +3,13 @@ package provider
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strconv"
 
-	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
@@ -44,21 +41,9 @@ type virtualServiceResourceModel struct {
 	Address  types.String `tfsdk:"address"`
 	Port     types.String `tfsdk:"port"`
 	Protocol types.String `tfsdk:"protocol"`
-	Nickname types.String `tfsdk:"nickname"`
 	Enabled  types.Bool   `tfsdk:"enabled"`
-	Type     types.String `tfsdk:"type"`
-
-	Schedule       types.String `tfsdk:"schedule"`
-	CheckType      types.String `tfsdk:"check_type"`
-	CheckPort      types.Int64  `tfsdk:"check_port"`
-	CheckPath      types.String `tfsdk:"check_path"`
-	CheckHost      types.String `tfsdk:"check_host"`
-	CheckMethod    types.String `tfsdk:"check_method"`
-	CheckUseHTTP11 types.Bool   `tfsdk:"check_use_http11"`
+	serviceSettingsModel
 }
-
-// checkMethods maps check_method values to the API's CheckUseGet codes.
-var checkMethods = []string{"HEAD", "GET", "POST"}
 
 func (r *virtualServiceResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_virtual_service"
@@ -67,7 +52,7 @@ func (r *virtualServiceResource) Metadata(_ context.Context, req resource.Metada
 func (r *virtualServiceResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description: "Manages a LoadMaster virtual service.",
-		Attributes: map[string]schema.Attribute{
+		Attributes: serviceSettingsAttributes(map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
 				Description:   "The virtual service index, as a string.",
@@ -94,80 +79,13 @@ func (r *virtualServiceResource) Schema(_ context.Context, _ resource.SchemaRequ
 				Validators:    []validator.String{stringvalidator.OneOf("tcp", "udp")},
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
-			"nickname": schema.StringAttribute{
-				Optional:    true,
-				Computed:    true,
-				Default:     stringdefault.StaticString(""),
-				Description: "Display name for the virtual service.",
-			},
 			"enabled": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
 				Default:     booldefault.StaticBool(true),
 				Description: "Whether the virtual service is enabled. Defaults to true.",
 			},
-			"type": schema.StringAttribute{
-				Optional:    true,
-				Computed:    true,
-				Default:     stringdefault.StaticString("gen"),
-				Description: "Service type: gen, http, http2, ts, tls or log. Defaults to gen.",
-				Validators:  []validator.String{stringvalidator.OneOf("gen", "http", "http2", "ts", "tls", "log")},
-			},
-			"schedule": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  stringdefault.StaticString("rr"),
-				Description: "Scheduling method: rr (round robin), wrr (weighted round robin), lc (least connection), " +
-					"wlc (weighted least connection), fixed (fixed weighting), sh (source IP hash) or " +
-					"dl (weighted response time). Defaults to rr.",
-				Validators: []validator.String{stringvalidator.OneOf("rr", "wrr", "lc", "wlc", "fixed", "sh", "dl")},
-			},
-			"check_type": schema.StringAttribute{
-				Optional:    true,
-				Computed:    true,
-				Default:     stringdefault.StaticString("tcp"),
-				Description: "Health check type for the real servers. Defaults to tcp; none disables checks.",
-				Validators: []validator.String{stringvalidator.OneOf(
-					"tcp", "icmp", "http", "https", "smtp", "nntp", "ftp", "telnet",
-					"pop3", "imap", "rdp", "ldap", "bdata", "none",
-				)},
-			},
-			"check_port": schema.Int64Attribute{
-				Optional:    true,
-				Computed:    true,
-				Default:     int64default.StaticInt64(0),
-				Description: "Port to health check. 0 (the default) checks each real server on its own port; otherwise 3-65530.",
-				Validators: []validator.Int64{int64validator.Any(
-					int64validator.OneOf(0),
-					int64validator.Between(3, 65530),
-				)},
-			},
-			"check_path": schema.StringAttribute{
-				Optional:    true,
-				Computed:    true,
-				Default:     stringdefault.StaticString(""),
-				Description: "URL path requested by http/https health checks, e.g. /healthz.",
-			},
-			"check_host": schema.StringAttribute{
-				Optional:    true,
-				Computed:    true,
-				Default:     stringdefault.StaticString(""),
-				Description: "Host header sent by http/https health checks.",
-			},
-			"check_method": schema.StringAttribute{
-				Optional:    true,
-				Computed:    true,
-				Default:     stringdefault.StaticString("HEAD"),
-				Description: "HTTP method used by http/https health checks: HEAD, GET or POST. Defaults to HEAD.",
-				Validators:  []validator.String{stringvalidator.OneOf(checkMethods...)},
-			},
-			"check_use_http11": schema.BoolAttribute{
-				Optional:    true,
-				Computed:    true,
-				Default:     booldefault.StaticBool(false),
-				Description: "Use HTTP/1.1 for http/https health checks. Defaults to false (HTTP/1.0).",
-			},
-		},
+		}),
 	}
 }
 
@@ -278,37 +196,13 @@ func (m *virtualServiceResourceModel) fromAPI(vs *client.VirtualService) {
 	m.Address = types.StringValue(vs.VSAddress)
 	m.Port = types.StringValue(vs.VSPort)
 	m.Protocol = types.StringValue(vs.Protocol)
-	m.Nickname = types.StringValue(vs.NickName)
 	m.Enabled = types.BoolValue(vs.Enable)
-	m.Type = types.StringValue(vs.VSType)
-	m.Schedule = types.StringValue(vs.Schedule)
-	m.CheckType = types.StringValue(vs.CheckType)
-	m.CheckPath = types.StringValue(vs.CheckURL)
-	m.CheckHost = types.StringValue(vs.CheckHost)
-	m.CheckUseHTTP11 = types.BoolValue(vs.CheckUseHTTP11)
-
-	if port, err := strconv.ParseInt(vs.CheckPort, 10, 64); err == nil {
-		m.CheckPort = types.Int64Value(port)
-	}
-	if vs.CheckUseGet >= 0 && vs.CheckUseGet < len(checkMethods) {
-		m.CheckMethod = types.StringValue(checkMethods[vs.CheckUseGet])
-	}
+	m.serviceSettingsModel.fromAPI(vs)
 }
 
 // params returns the attributes shared by addvs and modvs.
 func (m *virtualServiceResourceModel) params() client.VirtualServiceParams {
-	checkPort := strconv.FormatInt(m.CheckPort.ValueInt64(), 10)
-	checkUseGet := slices.Index(checkMethods, m.CheckMethod.ValueString())
-	return client.VirtualServiceParams{
-		NickName:       m.Nickname.ValueStringPointer(),
-		Enable:         m.Enabled.ValueBoolPointer(),
-		VSType:         m.Type.ValueStringPointer(),
-		Schedule:       m.Schedule.ValueStringPointer(),
-		CheckType:      m.CheckType.ValueStringPointer(),
-		CheckPort:      &checkPort,
-		CheckURL:       m.CheckPath.ValueStringPointer(),
-		CheckHost:      m.CheckHost.ValueStringPointer(),
-		CheckUseGet:    &checkUseGet,
-		CheckUseHTTP11: m.CheckUseHTTP11.ValueBoolPointer(),
-	}
+	p := m.serviceSettingsModel.params()
+	p.Enable = m.Enabled.ValueBoolPointer()
+	return p
 }

@@ -58,7 +58,8 @@ Then run `make install` and use `terraform plan` (skip `terraform init`) in any 
 ## Resources
 
 - `kemp_virtual_service`: manages a virtual service (address, port, protocol, nickname, enabled, type, scheduling method, health checks)
-- `kemp_real_server`: manages a real server on a virtual service (address, port, forward, weight, limit, enabled)
+- `kemp_sub_virtual_service`: manages a SubVS behind a parent virtual service (same settings as a virtual service, plus weight, limit and enabled on the parent)
+- `kemp_real_server`: manages a real server on a virtual service or SubVS (address, port, forward, weight, limit, enabled)
 
 ## Acceptance tests
 

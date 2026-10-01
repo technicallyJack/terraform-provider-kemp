@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -32,6 +33,11 @@ type Client struct {
 	username string
 	password string
 	http     *http.Client
+
+	// subVSLocks serializes SubVS creation per parent, since the new SubVS
+	// is identified by diffing the parent's SubVS list.
+	subVSLocksMu sync.Mutex
+	subVSLocks   map[int]*sync.Mutex
 }
 
 // New builds a Client from Config.

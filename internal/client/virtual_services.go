@@ -25,6 +25,8 @@ type VirtualService struct {
 	CheckHost      string `json:"CheckHost"`   // omitted by the API when empty
 	CheckUseGet    int    `json:"CheckUseGet"` // 0 = HEAD, 1 = GET, 2 = POST
 	CheckUseHTTP11 bool   `json:"CheckUse1.1"`
+
+	SubVS []SubVSSlot `json:"SubVS"` // only on parents
 }
 
 // VirtualServiceParams holds the settable attributes for addvs/modvs.
