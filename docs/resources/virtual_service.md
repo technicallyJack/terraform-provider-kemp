@@ -18,6 +18,14 @@ resource "kemp_virtual_service" "web" {
   port     = "443"
   nickname = "web_https"
   type     = "http"
+  schedule = "wlc"
+
+  check_type       = "https"
+  check_port       = 8443
+  check_path       = "/healthz"
+  check_host       = "web.example.com"
+  check_method     = "GET"
+  check_use_http11 = true
 }
 ```
 
@@ -31,9 +39,16 @@ resource "kemp_virtual_service" "web" {
 
 ### Optional
 
+- `check_host` (String) Host header sent by http/https health checks.
+- `check_method` (String) HTTP method used by http/https health checks: HEAD, GET or POST. Defaults to HEAD.
+- `check_path` (String) URL path requested by http/https health checks, e.g. /healthz.
+- `check_port` (Number) Port to health check. 0 (the default) checks each real server on its own port; otherwise 3-65530.
+- `check_type` (String) Health check type for the real servers. Defaults to tcp; none disables checks.
+- `check_use_http11` (Boolean) Use HTTP/1.1 for http/https health checks. Defaults to false (HTTP/1.0).
 - `enabled` (Boolean) Whether the virtual service is enabled. Defaults to true.
 - `nickname` (String) Display name for the virtual service.
 - `protocol` (String) Protocol: tcp or udp. Changing this forces a new virtual service. Defaults to tcp.
+- `schedule` (String) Scheduling method: rr (round robin), wrr (weighted round robin), lc (least connection), wlc (weighted least connection), fixed (fixed weighting), sh (source IP hash) or dl (weighted response time). Defaults to rr.
 - `type` (String) Service type: gen, http, http2, ts, tls or log. Defaults to gen.
 
 ### Read-Only

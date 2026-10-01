@@ -17,6 +17,14 @@ type VirtualService struct {
 	Status     string `json:"Status"`
 	Enable     bool   `json:"Enable"`
 	MasterVSID int    `json:"MasterVSID"` // parent index for SubVSs, 0 for top-level
+
+	Schedule       string `json:"Schedule"`
+	CheckType      string `json:"CheckType"`
+	CheckPort      string `json:"CheckPort"`   // "0" means use each real server's port
+	CheckURL       string `json:"CheckUrl"`    // omitted by the API when empty
+	CheckHost      string `json:"CheckHost"`   // omitted by the API when empty
+	CheckUseGet    int    `json:"CheckUseGet"` // 0 = HEAD, 1 = GET, 2 = POST
+	CheckUseHTTP11 bool   `json:"CheckUse1.1"`
 }
 
 // VirtualServiceParams holds the settable attributes for addvs/modvs.
@@ -28,6 +36,14 @@ type VirtualServiceParams struct {
 	NickName *string
 	Enable   *bool
 	VSType   *string
+
+	Schedule       *string
+	CheckType      *string
+	CheckPort      *string
+	CheckURL       *string // "" clears it
+	CheckHost      *string // "" clears it
+	CheckUseGet    *int
+	CheckUseHTTP11 *bool
 }
 
 func (p VirtualServiceParams) toMap() map[string]any {
@@ -40,6 +56,27 @@ func (p VirtualServiceParams) toMap() map[string]any {
 	}
 	if p.VSType != nil {
 		m["VStype"] = *p.VSType
+	}
+	if p.Schedule != nil {
+		m["Schedule"] = *p.Schedule
+	}
+	if p.CheckType != nil {
+		m["CheckType"] = *p.CheckType
+	}
+	if p.CheckPort != nil {
+		m["CheckPort"] = *p.CheckPort
+	}
+	if p.CheckURL != nil {
+		m["CheckUrl"] = *p.CheckURL
+	}
+	if p.CheckHost != nil {
+		m["CheckHost"] = *p.CheckHost
+	}
+	if p.CheckUseGet != nil {
+		m["CheckUseGet"] = strconv.Itoa(*p.CheckUseGet)
+	}
+	if p.CheckUseHTTP11 != nil {
+		m["CheckUse1.1"] = *p.CheckUseHTTP11
 	}
 	return m
 }
