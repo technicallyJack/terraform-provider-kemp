@@ -12,6 +12,9 @@ name: release
 on:
   push:
     tags: ["v*"]
+  # Manual fallback if a tag push didn't trigger a run: choose the tag under
+  # "Use workflow from" in the Actions tab.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -20,6 +23,12 @@ jobs:
   goreleaser:
     runs-on: ubuntu-latest
     steps:
+      - name: Require a tag
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          echo "Run this workflow from a v* tag, not ${{ github.ref }}." >&2
+          exit 1
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
