@@ -194,3 +194,10 @@ func TestCreateSubVirtualServiceFindsNewSlot(t *testing.T) {
 		t.Fatalf("expected not found for missing SubVS, got %v", err)
 	}
 }
+
+func newTestServer(t *testing.T, body string) *httptest.Server {
+	t.Helper()
+	return httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+}

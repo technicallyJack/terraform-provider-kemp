@@ -133,6 +133,10 @@ func (c *Client) Do(ctx context.Context, cmd string, params map[string]any, out 
 		return fmt.Errorf("reading response: %w", err)
 	}
 
+	if !json.Valid(raw) {
+		raw = repairJSON(raw)
+	}
+
 	var base baseResponse
 	if err := json.Unmarshal(raw, &base); err != nil {
 		// Auth failures and a disabled API interface return HTML pages, not JSON.
