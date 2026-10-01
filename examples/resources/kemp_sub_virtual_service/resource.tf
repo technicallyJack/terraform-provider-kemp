@@ -20,3 +20,17 @@ resource "kemp_real_server" "cluster_a" {
   address               = each.value
   port                  = 30443
 }
+
+# Content switching: send /api/ requests on the same parent to their own SubVS.
+resource "kemp_match_rule" "api" {
+  name       = "api_path"
+  pattern    = "/api/"
+  match_type = "prefix"
+}
+
+resource "kemp_sub_virtual_service" "api" {
+  parent_index = kemp_virtual_service.ingress.index
+  nickname     = "api"
+  type         = "http"
+  match_rules  = [kemp_match_rule.api.name]
+}

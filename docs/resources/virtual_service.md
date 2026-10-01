@@ -32,6 +32,30 @@ resource "kemp_virtual_service" "web" {
     cookie_name = "JSESSIONID"
     timeout     = 1800
   }
+
+  # Rules run in list order. Reference the rule resources' names so they are
+  # created before being attached.
+  request_rules  = [kemp_url_rule.legacy.name, kemp_header_rule.env.name]
+  response_rules = [kemp_header_rule.server.name]
+}
+
+resource "kemp_url_rule" "legacy" {
+  name        = "legacy_paths"
+  pattern     = "^/old/(.*)"
+  replacement = "/new/\\1"
+}
+
+resource "kemp_header_rule" "env" {
+  name   = "add_env_header"
+  action = "add"
+  header = "X-Environment"
+  value  = "production"
+}
+
+resource "kemp_header_rule" "server" {
+  name   = "strip_server_header"
+  action = "delete"
+  header = "Server"
 }
 ```
 
@@ -54,7 +78,10 @@ resource "kemp_virtual_service" "web" {
 - `enabled` (Boolean) Whether the virtual service is enabled. Defaults to true.
 - `nickname` (String) Display name.
 - `persistence` (Attributes) Session persistence. Leave out to turn persistence off. Each mode needs at most one of cookie_name, header_name or query_parameter. (see [below for nested schema](#nestedatt--persistence))
+- `pre_process_rules` (List of String) Names of the rules to evaluate before content switching, typically to set flags, applied in order. Accepts match rules. Reference the rule resources' name attributes so Terraform creates rules before attaching them. Reordering detaches and re-attaches the rules from the first moved one onward, briefly leaving them off; adding rules at the end or removing rules causes no gap.
 - `protocol` (String) Protocol: tcp or udp. Changing this forces a new virtual service. Defaults to tcp.
+- `request_rules` (List of String) Names of the rules to apply to requests (header changes, URL rewrites), applied in order. Accepts add header rules, delete header rules, replace header rules, modify URL rules. Reference the rule resources' name attributes so Terraform creates rules before attaching them. Reordering detaches and re-attaches the rules from the first moved one onward, briefly leaving them off; adding rules at the end or removing rules causes no gap.
+- `response_rules` (List of String) Names of the rules to apply to responses, applied in order. Accepts add header rules, delete header rules, replace header rules, modify URL rules. Reference the rule resources' name attributes so Terraform creates rules before attaching them. Reordering detaches and re-attaches the rules from the first moved one onward, briefly leaving them off; adding rules at the end or removing rules causes no gap.
 - `schedule` (String) Scheduling method: rr (round robin), wrr (weighted round robin), lc (least connection), wlc (weighted least connection), fixed (fixed weighting), sh (source IP hash) or dl (weighted response time). Defaults to rr.
 - `type` (String) Service type: gen, http, http2, ts, tls or log. Defaults to gen.
 

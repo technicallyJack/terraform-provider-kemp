@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -125,7 +126,16 @@ func (r *virtualServiceResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
-	plan.fromAPI(vs)
+	// Save the index first so a failure attaching rules leaves a tainted
+	// resource, not an orphan.
+	plan.ID = types.StringValue(strconv.Itoa(vs.Index))
+	plan.Index = types.Int64Value(int64(vs.Index))
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(r.applyRules(ctx, vs, &plan)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -168,7 +178,11 @@ func (r *virtualServiceResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	plan.fromAPI(vs)
+	plan.ID, plan.Index = state.ID, state.Index
+	resp.Diagnostics.Append(r.applyRules(ctx, vs, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -193,6 +207,22 @@ func (r *virtualServiceResource) ImportState(ctx context.Context, req resource.I
 	}
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("index"), index)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+}
+
+// applyRules attaches the planned rule lists to vs (as just returned by
+// addvs/modvs) and refreshes m from the LoadMaster.
+func (r *virtualServiceResource) applyRules(ctx context.Context, vs *client.VirtualService, m *virtualServiceResourceModel) diag.Diagnostics {
+	diags := setServiceRules(ctx, r.client, vs.Index, vs, &m.serviceSettingsModel)
+	if diags.HasError() {
+		return diags
+	}
+	fresh, err := r.client.GetVirtualService(ctx, vs.Index)
+	if err != nil {
+		diags.AddError("Unable to read virtual service", err.Error())
+		return diags
+	}
+	m.fromAPI(fresh)
+	return diags
 }
 
 func (m *virtualServiceResourceModel) fromAPI(vs *client.VirtualService) {

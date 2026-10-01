@@ -17,4 +17,28 @@ resource "kemp_virtual_service" "web" {
     cookie_name = "JSESSIONID"
     timeout     = 1800
   }
+
+  # Rules run in list order. Reference the rule resources' names so they are
+  # created before being attached.
+  request_rules  = [kemp_url_rule.legacy.name, kemp_header_rule.env.name]
+  response_rules = [kemp_header_rule.server.name]
+}
+
+resource "kemp_url_rule" "legacy" {
+  name        = "legacy_paths"
+  pattern     = "^/old/(.*)"
+  replacement = "/new/\\1"
+}
+
+resource "kemp_header_rule" "env" {
+  name   = "add_env_header"
+  action = "add"
+  header = "X-Environment"
+  value  = "production"
+}
+
+resource "kemp_header_rule" "server" {
+  name   = "strip_server_header"
+  action = "delete"
+  header = "Server"
 }

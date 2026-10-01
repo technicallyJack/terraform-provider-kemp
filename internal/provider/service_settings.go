@@ -30,6 +30,10 @@ type serviceSettingsModel struct {
 	CheckUseHTTP11 types.Bool   `tfsdk:"check_use_http11"`
 
 	Persistence *persistenceModel `tfsdk:"persistence"`
+
+	RequestRules    types.List `tfsdk:"request_rules"`
+	ResponseRules   types.List `tfsdk:"response_rules"`
+	PreProcessRules types.List `tfsdk:"pre_process_rules"`
 }
 
 // checkMethods maps check_method values to the API's CheckUseGet codes.
@@ -106,7 +110,10 @@ func serviceSettingsAttributes(extra map[string]schema.Attribute) map[string]sch
 			Default:     booldefault.StaticBool(false),
 			Description: "Use HTTP/1.1 for http/https health checks. Defaults to false (HTTP/1.0).",
 		},
-		"persistence": persistenceAttribute(),
+		"persistence":       persistenceAttribute(),
+		"request_rules":     ruleListAttribute(requestRuleList, "apply to requests (header changes, URL rewrites)"),
+		"response_rules":    ruleListAttribute(responseRuleList, "apply to responses"),
+		"pre_process_rules": ruleListAttribute(preProcessRuleList, "evaluate before content switching, typically to set flags"),
 	}
 	for k, v := range extra {
 		attrs[k] = v
@@ -130,6 +137,9 @@ func (m *serviceSettingsModel) fromAPI(vs *client.VirtualService) {
 		m.CheckMethod = types.StringValue(checkMethods[vs.CheckUseGet])
 	}
 	m.Persistence = persistenceFromAPI(vs)
+	m.RequestRules = stringList(vs.RequestRules)
+	m.ResponseRules = stringList(vs.ResponseRules)
+	m.PreProcessRules = stringList(vs.PreProcessRules)
 }
 
 // params returns the modvs parameters for these settings.

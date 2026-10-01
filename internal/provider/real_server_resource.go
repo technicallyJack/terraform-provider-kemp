@@ -49,6 +49,7 @@ type realServerResourceModel struct {
 	Weight              types.Int64  `tfsdk:"weight"`
 	Limit               types.Int64  `tfsdk:"limit"`
 	Enabled             types.Bool   `tfsdk:"enabled"`
+	MatchRules          types.List   `tfsdk:"match_rules"`
 }
 
 func (r *realServerResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -111,6 +112,8 @@ func (r *realServerResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Default:     booldefault.StaticBool(true),
 				Description: "Whether the real server receives traffic. Defaults to true.",
 			},
+			"match_rules": ruleListAttribute(matchRuleList,
+				"evaluate for content switching: the virtual service only sends a request to this real server when one matches"),
 		},
 	}
 }
@@ -253,6 +256,16 @@ func (r *realServerResource) apply(ctx context.Context, m *realServerResourceMod
 		diags.AddError("Unable to read real server after update", err.Error())
 		return diags
 	}
+	diags.Append(setRuleList(ctx, r.client, matchRuleList, client.RSMatchRules(vsIndex, rsIndex), rs.MatchRules, m.MatchRules)...)
+	if diags.HasError() {
+		return diags
+	}
+
+	rs, err = r.client.GetRealServer(ctx, vsIndex, rsIndex)
+	if err != nil {
+		diags.AddError("Unable to read real server after update", err.Error())
+		return diags
+	}
 	m.fromAPI(rs)
 	return diags
 }
@@ -267,6 +280,7 @@ func (m *realServerResourceModel) fromAPI(rs *client.RealServer) {
 	m.Weight = types.Int64Value(int64(rs.Weight))
 	m.Limit = types.Int64Value(int64(rs.Limit))
 	m.Enabled = types.BoolValue(rs.Enable)
+	m.MatchRules = stringList(rs.MatchRules)
 }
 
 func realServerID(vsIndex, rsIndex int) string {

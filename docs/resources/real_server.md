@@ -42,6 +42,7 @@ resource "kemp_real_server" "web" {
 - `enabled` (Boolean) Whether the real server receives traffic. Defaults to true.
 - `forward` (String) Forwarding method: nat or route (direct server return). Defaults to nat.
 - `limit` (Number) Maximum number of open connections to this real server. 0 means unlimited.
+- `match_rules` (List of String) Names of the rules to evaluate for content switching: the virtual service only sends a request to this real server when one matches, applied in order. Accepts match rules. Reference the rule resources' name attributes so Terraform creates rules before attaching them. Reordering detaches and re-attaches the rules from the first moved one onward, briefly leaving them off; adding rules at the end or removing rules causes no gap.
 - `weight` (Number) Relative weight for weighted scheduling methods. Defaults to 1000.
 
 ### Read-Only

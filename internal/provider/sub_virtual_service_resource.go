@@ -44,6 +44,7 @@ type subVirtualServiceResourceModel struct {
 	Enabled     types.Bool   `tfsdk:"enabled"`
 	Weight      types.Int64  `tfsdk:"weight"`
 	Limit       types.Int64  `tfsdk:"limit"`
+	MatchRules  types.List   `tfsdk:"match_rules"`
 	serviceSettingsModel
 }
 
@@ -93,6 +94,8 @@ func (r *subVirtualServiceResource) Schema(_ context.Context, _ resource.SchemaR
 				Description: "Maximum number of open connections the parent sends to this SubVS. 0 means unlimited.",
 				Validators:  []validator.Int64{int64validator.AtLeast(0)},
 			},
+			"match_rules": ruleListAttribute(matchRuleList,
+				"evaluate on the parent for content switching: the parent only sends a request to this SubVS when one matches"),
 		}),
 	}
 }
@@ -135,7 +138,7 @@ func (r *subVirtualServiceResource) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
-	resp.Diagnostics.Append(r.apply(ctx, &plan, slot.RsIndex)...)
+	resp.Diagnostics.Append(r.apply(ctx, &plan, slot)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -177,7 +180,7 @@ func (r *subVirtualServiceResource) Update(ctx context.Context, req resource.Upd
 		return
 	}
 
-	resp.Diagnostics.Append(r.apply(ctx, &plan, slot.RsIndex)...)
+	resp.Diagnostics.Append(r.apply(ctx, &plan, slot)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -211,18 +214,24 @@ func (r *subVirtualServiceResource) ImportState(ctx context.Context, req resourc
 
 // apply pushes the SubVS's own settings (modvs) and its parent-side slot
 // settings (modrs on the parent), then refreshes the model.
-func (r *subVirtualServiceResource) apply(ctx context.Context, m *subVirtualServiceResourceModel, rsIndex int) diag.Diagnostics {
+func (r *subVirtualServiceResource) apply(ctx context.Context, m *subVirtualServiceResourceModel, slot *client.SubVSSlot) diag.Diagnostics {
 	var diags diag.Diagnostics
 	index, parent := int(m.Index.ValueInt64()), int(m.ParentIndex.ValueInt64())
 
 	// modvs rejects Enable for SubVSs; it's part of the parent-side slot.
-	if _, err := r.client.UpdateVirtualService(ctx, index, m.serviceSettingsModel.params()); err != nil {
+	vs, err := r.client.UpdateVirtualService(ctx, index, m.serviceSettingsModel.params())
+	if err != nil {
 		diags.AddError("Unable to update SubVS", err.Error())
+		return diags
+	}
+	diags.Append(setServiceRules(ctx, r.client, index, vs, &m.serviceSettingsModel)...)
+	diags.Append(setRuleList(ctx, r.client, matchRuleList, client.RSMatchRules(parent, slot.RsIndex), slot.MatchRules, m.MatchRules)...)
+	if diags.HasError() {
 		return diags
 	}
 
 	weight, limit := int(m.Weight.ValueInt64()), int(m.Limit.ValueInt64())
-	err := r.client.UpdateSubVSSlot(ctx, parent, rsIndex, client.SubVSSlotParams{
+	err = r.client.UpdateSubVSSlot(ctx, parent, slot.RsIndex, client.SubVSSlotParams{
 		Weight: &weight,
 		Limit:  &limit,
 		Enable: m.Enabled.ValueBoolPointer(),
@@ -274,6 +283,7 @@ func (r *subVirtualServiceResource) refresh(ctx context.Context, m *subVirtualSe
 	m.Enabled = types.BoolValue(slot.Enable)
 	m.Weight = types.Int64Value(int64(slot.Weight))
 	m.Limit = types.Int64Value(int64(slot.Limit))
+	m.MatchRules = stringList(slot.MatchRules)
 	m.serviceSettingsModel.fromAPI(vs)
 	return true, diags
 }
