@@ -1,3 +1,7 @@
+VERSION ?= 0.1.0
+OS_ARCH := $(shell go env GOOS)_$(shell go env GOARCH)
+LOCAL_PLUGIN_DIR := $(HOME)/.terraform.d/plugins/registry.terraform.io/jwinkler/kemp/$(VERSION)/$(OS_ARCH)
+
 default: build
 
 build:
@@ -5,6 +9,15 @@ build:
 
 install:
 	go install -v ./...
+
+# Installs into Terraform's implied local mirror so configs can use
+# source = "jwinkler/kemp", version = "$(VERSION)" with a normal init.
+# Bump VERSION for each rebuild you want picked up: init records the
+# binary's checksum in .terraform.lock.hcl and rejects a changed binary
+# under the same version.
+install-local:
+	go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o $(LOCAL_PLUGIN_DIR)/terraform-provider-kemp_v$(VERSION) .
+	@echo "installed jwinkler/kemp $(VERSION) to $(LOCAL_PLUGIN_DIR)"
 
 fmt:
 	gofmt -s -w -e .
@@ -28,4 +41,4 @@ sweep:
 generate:
 	go tool tfplugindocs generate --provider-name kemp || go tool tfplugindocs generate --provider-name kemp
 
-.PHONY: default build install fmt lint test testacc sweep generate
+.PHONY: default build install install-local fmt lint test testacc sweep generate
