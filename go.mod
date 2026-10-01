@@ -1,4 +1,4 @@
-module gitea.jacksonwinkler.com/jackson.winkler/terraform-provider-kemp
+module github.com/technicallyJack/terraform-provider-kemp
 
 go 1.25.8
 

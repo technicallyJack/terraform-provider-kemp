@@ -9,7 +9,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 
-	"gitea.jacksonwinkler.com/jackson.winkler/terraform-provider-kemp/internal/client"
+	"github.com/technicallyJack/terraform-provider-kemp/internal/client"
 )
 
 func TestMain(m *testing.M) {

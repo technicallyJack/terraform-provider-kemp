@@ -15,7 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
-	"gitea.jacksonwinkler.com/jackson.winkler/terraform-provider-kemp/internal/client"
+	"github.com/technicallyJack/terraform-provider-kemp/internal/client"
 )
 
 var _ provider.Provider = &kempProvider{}

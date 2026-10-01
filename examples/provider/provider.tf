@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     kemp = {
-      source = "jwinkler/kemp"
+      source = "technicallyjack/kemp"
     }
   }
 }

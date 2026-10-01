@@ -7,7 +7,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 
-	"gitea.jacksonwinkler.com/jackson.winkler/terraform-provider-kemp/internal/provider"
+	"github.com/technicallyJack/terraform-provider-kemp/internal/provider"
 )
 
 // version is set by goreleaser at build time.
@@ -20,7 +20,7 @@ func main() {
 	flag.Parse()
 
 	opts := providerserver.ServeOpts{
-		Address: "registry.terraform.io/jwinkler/kemp",
+		Address: "registry.terraform.io/technicallyjack/kemp",
 		Debug:   debug,
 	}
 

@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 
-	"gitea.jacksonwinkler.com/jackson.winkler/terraform-provider-kemp/internal/client"
+	"github.com/technicallyJack/terraform-provider-kemp/internal/client"
 )
 
 func TestPersistenceParams(t *testing.T) {

@@ -26,6 +26,16 @@ make test       # unit tests
 make testacc    # acceptance tests against a real LoadMaster
 ```
 
+## Releases
+
+Releases are automatic. Every push to `main` on Gitea runs `.gitea/workflows/release.yaml`, which:
+
+1. works out the next version from the [Conventional Commits](https://www.conventionalcommits.org/) since the last tag (`scripts/next-version.sh`): `feat` bumps the minor version, `fix`/`perf` the patch version, and a breaking change (`type!:` or a `BREAKING CHANGE:` footer) the major version, or the minor version while below 1.0. Pushes containing only other types (`docs`, `chore`, `test`, `build`, ...) don't release.
+2. tags the commit on Gitea, then pushes `main` and the `v*` tags to [GitHub](https://github.com/technicallyJack/terraform-provider-kemp).
+3. On GitHub, `.github/workflows/release.yml` runs the unit tests, then goreleaser builds, signs and publishes the release, which the Terraform Registry picks up.
+
+`make test-scripts` tests the version calculation.
+
 ## Local development
 
 Point Terraform at your locally built binary with a dev override in `~/.terraformrc`:
@@ -33,7 +43,7 @@ Point Terraform at your locally built binary with a dev override in `~/.terrafor
 ```hcl
 provider_installation {
   dev_overrides {
-    "jwinkler/kemp" = "/home/<you>/go/bin"
+    "technicallyjack/kemp" = "/home/<you>/go/bin"
   }
   direct {}
 }

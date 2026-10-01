@@ -15,7 +15,7 @@ Manage Kemp LoadMaster appliances via the LoadMaster JSON API.
 terraform {
   required_providers {
     kemp = {
-      source = "jwinkler/kemp"
+      source = "technicallyjack/kemp"
     }
   }
 }
