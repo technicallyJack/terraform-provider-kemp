@@ -17,6 +17,8 @@ type SubVSSlot struct {
 	Weight  int    `json:"Weight"`
 	Limit   int    `json:"Limit"`
 	Enable  bool   `json:"Enable"`
+
+	MatchRules []string `json:"MatchRules"` // content switching rules; omitted when empty
 }
 
 // SubVSSlotParams holds the parent-side settings for a SubVS. Nil fields are

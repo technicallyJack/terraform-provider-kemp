@@ -18,6 +18,8 @@ type RealServer struct {
 	Limit   int    `json:"Limit"`
 	Enable  bool   `json:"Enable"`
 	Status  string `json:"Status"`
+
+	MatchRules []string `json:"MatchRules"` // content switching rules; omitted when empty
 }
 
 // RealServerParams holds the settable attributes for modrs. Nil fields are

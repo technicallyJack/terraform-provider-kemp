@@ -82,11 +82,14 @@ func (e *APIError) Error() string {
 }
 
 // IsNotFound reports whether err is the LoadMaster's response for an object
-// that doesn't exist (code 422, e.g. "Unknown VS").
+// that doesn't exist (code 422, e.g. "Unknown VS" or "Rule not found").
 func IsNotFound(err error) bool {
 	var apiErr *APIError
-	return errors.As(err, &apiErr) && apiErr.Code == http.StatusUnprocessableEntity &&
-		strings.HasPrefix(strings.ToLower(apiErr.Message), "unknown")
+	if !errors.As(err, &apiErr) || apiErr.Code != http.StatusUnprocessableEntity {
+		return false
+	}
+	msg := strings.ToLower(apiErr.Message)
+	return strings.HasPrefix(msg, "unknown") || strings.Contains(msg, "not found")
 }
 
 // baseResponse holds the fields common to every accessv2 response.

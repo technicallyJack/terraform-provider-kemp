@@ -140,6 +140,9 @@ func (p *kempProvider) Resources(_ context.Context) []func() resource.Resource {
 		NewVirtualServiceResource,
 		NewRealServerResource,
 		NewSubVirtualServiceResource,
+		NewMatchRuleResource,
+		NewHeaderRuleResource,
+		NewURLRuleResource,
 	}
 }
 

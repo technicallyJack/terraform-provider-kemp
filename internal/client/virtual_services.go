@@ -31,6 +31,10 @@ type VirtualService struct {
 	Cookie         string `json:"Cookie"`         // cookie name, or header name for header persistence
 	QueryTag       string `json:"QueryTag"`       // query parameter for query-hash persistence
 
+	RequestRules    []string `json:"RequestRules"` // omitted by the API when empty
+	ResponseRules   []string `json:"ResponseRules"`
+	PreProcessRules []string `json:"PreProcessRules"`
+
 	SubVS []SubVSSlot `json:"SubVS"` // only on parents
 }
 

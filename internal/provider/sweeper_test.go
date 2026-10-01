@@ -16,11 +16,48 @@ func TestMain(m *testing.M) {
 	resource.TestMain(m)
 }
 
-// The sweeper removes virtual services left behind by failed acceptance
-// tests: only those on KEMP_TEST_VS_ADDRESS whose nickname starts with
-// "tf-acc". Deleting a parent also removes its SubVSs and real servers.
+// The sweepers remove objects left behind by failed acceptance
+// tests: virtual services on KEMP_TEST_VS_ADDRESS whose nickname starts with
+// "tf-acc" (deleting a parent also removes its SubVSs and real servers), and
+// rules named tfacc_*.
 // Run with `make sweep`.
+func sweeperClient() (*client.Client, error) {
+	return client.New(client.Config{
+		Host:     os.Getenv("KEMP_HOST"),
+		APIKey:   os.Getenv("KEMP_API_KEY"),
+		Username: os.Getenv("KEMP_USERNAME"),
+		Password: os.Getenv("KEMP_PASSWORD"),
+		Insecure: os.Getenv("KEMP_INSECURE") == "true",
+	})
+}
+
 func init() {
+	// Rules named tfacc_* (rule names can't contain hyphens).
+	resource.AddTestSweepers("kemp_rule", &resource.Sweeper{
+		Name: "kemp_rule",
+		F: func(_ string) error {
+			c, err := sweeperClient()
+			if err != nil {
+				return err
+			}
+			ctx := context.Background()
+			rules, err := c.ListRules(ctx)
+			if err != nil {
+				return err
+			}
+			for _, r := range rules {
+				if !strings.HasPrefix(r.Name, "tfacc_") {
+					continue
+				}
+				fmt.Printf("sweeping rule %s\n", r.Name)
+				if err := c.DeleteRule(ctx, r.Name); err != nil && !client.IsNotFound(err) {
+					return err
+				}
+			}
+			return nil
+		},
+	})
+
 	resource.AddTestSweepers("kemp_virtual_service", &resource.Sweeper{
 		Name: "kemp_virtual_service",
 		F: func(_ string) error {
@@ -28,13 +65,7 @@ func init() {
 			if addr == "" {
 				return fmt.Errorf("KEMP_TEST_VS_ADDRESS must be set to sweep")
 			}
-			c, err := client.New(client.Config{
-				Host:     os.Getenv("KEMP_HOST"),
-				APIKey:   os.Getenv("KEMP_API_KEY"),
-				Username: os.Getenv("KEMP_USERNAME"),
-				Password: os.Getenv("KEMP_PASSWORD"),
-				Insecure: os.Getenv("KEMP_INSECURE") == "true",
-			})
+			c, err := sweeperClient()
 			if err != nil {
 				return err
 			}
