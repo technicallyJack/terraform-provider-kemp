@@ -26,6 +26,11 @@ type VirtualService struct {
 	CheckUseGet    int    `json:"CheckUseGet"` // 0 = HEAD, 1 = GET, 2 = POST
 	CheckUseHTTP11 bool   `json:"CheckUse1.1"`
 
+	Persist        string `json:"Persist"`        // omitted by the API when persistence is off
+	PersistTimeout string `json:"PersistTimeout"` // seconds; "0" when off
+	Cookie         string `json:"Cookie"`         // cookie name, or header name for header persistence
+	QueryTag       string `json:"QueryTag"`       // query parameter for query-hash persistence
+
 	SubVS []SubVSSlot `json:"SubVS"` // only on parents
 }
 
@@ -46,6 +51,14 @@ type VirtualServiceParams struct {
 	CheckHost      *string // "" clears it
 	CheckUseGet    *int
 	CheckUseHTTP11 *bool
+
+	// Persist "none" turns persistence off. Don't send PersistTimeout with
+	// it: any timeout of 60+ while persistence is off enables source IP
+	// persistence, and 1-59 is silently stored as 0 (off).
+	Persist        *string
+	PersistTimeout *string
+	Cookie         *string // "" clears it
+	QueryTag       *string // "" clears it
 }
 
 func (p VirtualServiceParams) toMap() map[string]any {
@@ -79,6 +92,18 @@ func (p VirtualServiceParams) toMap() map[string]any {
 	}
 	if p.CheckUseHTTP11 != nil {
 		m["CheckUse1.1"] = *p.CheckUseHTTP11
+	}
+	if p.Persist != nil {
+		m["Persist"] = *p.Persist
+	}
+	if p.PersistTimeout != nil {
+		m["PersistTimeout"] = *p.PersistTimeout
+	}
+	if p.Cookie != nil {
+		m["Cookie"] = *p.Cookie
+	}
+	if p.QueryTag != nil {
+		m["QueryTag"] = *p.QueryTag
 	}
 	return m
 }

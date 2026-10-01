@@ -11,4 +11,10 @@ resource "kemp_virtual_service" "web" {
   check_host       = "web.example.com"
   check_method     = "GET"
   check_use_http11 = true
+
+  persistence = {
+    mode        = "cookie"
+    cookie_name = "JSESSIONID"
+    timeout     = 1800
+  }
 }

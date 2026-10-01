@@ -55,6 +55,7 @@ resource "kemp_real_server" "cluster_a" {
 - `enabled` (Boolean) Whether the parent sends traffic to this SubVS. Defaults to true.
 - `limit` (Number) Maximum number of open connections the parent sends to this SubVS. 0 means unlimited.
 - `nickname` (String) Display name.
+- `persistence` (Attributes) Session persistence. Leave out to turn persistence off. Each mode needs at most one of cookie_name, header_name or query_parameter. (see [below for nested schema](#nestedatt--persistence))
 - `schedule` (String) Scheduling method: rr (round robin), wrr (weighted round robin), lc (least connection), wlc (weighted least connection), fixed (fixed weighting), sh (source IP hash) or dl (weighted response time). Defaults to rr.
 - `type` (String) Service type: gen, http, http2, ts, tls or log. Defaults to gen.
 - `weight` (Number) Relative weight within the parent's weighted scheduling methods. Defaults to 1000.
@@ -63,6 +64,20 @@ resource "kemp_real_server" "cluster_a" {
 
 - `id` (String) The SubVS's virtual service index, as a string.
 - `index` (Number) LoadMaster-assigned virtual service index of the SubVS.
+
+<a id="nestedatt--persistence"></a>
+### Nested Schema for `persistence`
+
+Required:
+
+- `mode` (String) Persistence mode: src (source IP), ssl (SSL session ID), cookie (server cookie), active-cookie (cookie inserted by the LoadMaster), cookie-src / active-cook-src (cookie, falling back to source IP), cookie-hash / cookie-hash-src (hash of a server cookie), url (URL hash), query-hash (hash of a query parameter), host (Host header), header (hash of a request header), super / super-src (super HTTP), rdp / rdp-src (RDP login) or rdp-sb (RDP session broker).
+
+Optional:
+
+- `cookie_name` (String) Cookie to persist on, for the cookie modes. Required for cookie and cookie-src.
+- `header_name` (String) Request header to hash, for the header mode. Required for header.
+- `query_parameter` (String) Query string parameter to hash, for the query-hash mode. Required for query-hash.
+- `timeout` (Number) Seconds a client stays with the same real server, 60-604800. Defaults to 360. (The LoadMaster treats anything under 60 as turning persistence off.)
 
 ## Import
 

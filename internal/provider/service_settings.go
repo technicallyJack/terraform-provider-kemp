@@ -28,6 +28,8 @@ type serviceSettingsModel struct {
 	CheckHost      types.String `tfsdk:"check_host"`
 	CheckMethod    types.String `tfsdk:"check_method"`
 	CheckUseHTTP11 types.Bool   `tfsdk:"check_use_http11"`
+
+	Persistence *persistenceModel `tfsdk:"persistence"`
 }
 
 // checkMethods maps check_method values to the API's CheckUseGet codes.
@@ -104,6 +106,7 @@ func serviceSettingsAttributes(extra map[string]schema.Attribute) map[string]sch
 			Default:     booldefault.StaticBool(false),
 			Description: "Use HTTP/1.1 for http/https health checks. Defaults to false (HTTP/1.0).",
 		},
+		"persistence": persistenceAttribute(),
 	}
 	for k, v := range extra {
 		attrs[k] = v
@@ -126,13 +129,14 @@ func (m *serviceSettingsModel) fromAPI(vs *client.VirtualService) {
 	if vs.CheckUseGet >= 0 && vs.CheckUseGet < len(checkMethods) {
 		m.CheckMethod = types.StringValue(checkMethods[vs.CheckUseGet])
 	}
+	m.Persistence = persistenceFromAPI(vs)
 }
 
 // params returns the modvs parameters for these settings.
 func (m *serviceSettingsModel) params() client.VirtualServiceParams {
 	checkPort := strconv.FormatInt(m.CheckPort.ValueInt64(), 10)
 	checkUseGet := slices.Index(checkMethods, m.CheckMethod.ValueString())
-	return client.VirtualServiceParams{
+	p := client.VirtualServiceParams{
 		NickName:       m.Nickname.ValueStringPointer(),
 		VSType:         m.Type.ValueStringPointer(),
 		Schedule:       m.Schedule.ValueStringPointer(),
@@ -143,4 +147,6 @@ func (m *serviceSettingsModel) params() client.VirtualServiceParams {
 		CheckUseGet:    &checkUseGet,
 		CheckUseHTTP11: m.CheckUseHTTP11.ValueBoolPointer(),
 	}
+	persistenceParams(m.Persistence, &p)
+	return p
 }

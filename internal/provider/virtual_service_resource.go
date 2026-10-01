@@ -21,9 +21,10 @@ import (
 )
 
 var (
-	_ resource.Resource                = &virtualServiceResource{}
-	_ resource.ResourceWithConfigure   = &virtualServiceResource{}
-	_ resource.ResourceWithImportState = &virtualServiceResource{}
+	_ resource.Resource                   = &virtualServiceResource{}
+	_ resource.ResourceWithConfigure      = &virtualServiceResource{}
+	_ resource.ResourceWithImportState    = &virtualServiceResource{}
+	_ resource.ResourceWithValidateConfig = &virtualServiceResource{}
 )
 
 // NewVirtualServiceResource returns the kemp_virtual_service resource.
@@ -87,6 +88,10 @@ func (r *virtualServiceResource) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 		}),
 	}
+}
+
+func (r *virtualServiceResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	resp.Diagnostics.Append(validatePersistence(ctx, req.Config)...)
 }
 
 func (r *virtualServiceResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
