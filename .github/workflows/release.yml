@@ -1,0 +1,48 @@
+# Builds, signs and publishes a GitHub release when a v* tag arrives (pushed
+# from Gitea by .gitea/workflows/release.yaml). The Terraform Registry picks
+# releases up through its webhook on this repository.
+#
+# Secrets:
+#   GPG_PRIVATE_KEY  ASCII-armored private key whose public key is registered
+#                    with the Terraform Registry (RSA; the registry doesn't
+#                    accept ECC keys)
+#   PASSPHRASE       its passphrase
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Unit tests only; acceptance tests need a LoadMaster.
+      - name: Test
+        run: go test ./...
+
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.PASSPHRASE }}
+
+      - name: Release
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}

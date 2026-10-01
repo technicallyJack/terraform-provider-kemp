@@ -1,0 +1,62 @@
+# Tags releases on main and mirrors main and its v* tags to GitHub, where
+# .github/workflows/release.yml builds, signs and publishes them for the
+# Terraform Registry.
+#
+# The next version comes from the Conventional Commits since the last tag
+# (scripts/next-version.sh): feat -> minor, fix/perf -> patch, breaking ->
+# major (minor below 1.0). Pushes with only docs/chore/test/build commits are
+# mirrored without a release.
+#
+# Runner: host-mode act_runner (label "host") with git and bash.
+# Secrets:
+#   GH_PUSH_TOKEN  fine-grained GitHub token for technicallyJack/terraform-provider-kemp
+#                  with Contents and Workflows read/write (Workflows is needed to
+#                  push changes under .github/workflows).
+#
+# Gitea only runs .gitea/workflows when it exists, so it ignores the GitHub
+# workflows in .github/workflows.
+name: release
+
+on:
+  push:
+    branches: [main]
+
+env:
+  GITHUB_REPO_URL: https://github.com/technicallyJack/terraform-provider-kemp.git
+
+jobs:
+  tag-and-mirror:
+    runs-on: host
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history and tags for the version calculation
+
+      # Gitea Actions only implements the always() expression, so the
+      # "is there a release" decision is made in shell rather than with if:.
+      - name: Tag and push to GitHub
+        env:
+          GH_PUSH_TOKEN: ${{ secrets.GH_PUSH_TOKEN }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force origin
+
+          version="$(scripts/next-version.sh)"
+          if [ -n "$version" ]; then
+            echo "Releasing $version at $GITHUB_SHA"
+            git -c user.name="Gitea Actions" -c user.email="actions@gitea.jacksonwinkler.com" \
+              tag -a "$version" -m "$version" "$GITHUB_SHA"
+            # Gitea holds the tags of record: tag there first, so a failed
+            # GitHub push is retried by the next run instead of recalculated.
+            git push origin "refs/tags/$version"
+          else
+            echo "No release-worthy commits since the last tag; mirroring only."
+          fi
+
+          # Push the commit this run was triggered for and every v* tag. Tags
+          # GitHub already has are no-ops, so a tag whose GitHub push failed
+          # earlier is caught up here. An older run finishing after a newer one
+          # is rejected as non-fast-forward rather than rewinding main.
+          auth="$(printf 'x-access-token:%s' "$GH_PUSH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+            push "$GITHUB_REPO_URL" "$GITHUB_SHA:refs/heads/main" 'refs/tags/v*:refs/tags/v*'
