@@ -12,6 +12,9 @@ provider "kemp" {
   host     = "loadmaster.example.com"
   api_key  = var.kemp_api_key
   insecure = true
+
+  # The free LoadMaster rate-limits its API; licensed appliances may allow more.
+  # max_concurrent_requests = 4
 }
 
 variable "kemp_api_key" {

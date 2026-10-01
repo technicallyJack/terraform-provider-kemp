@@ -11,10 +11,21 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
 	"sync"
 	"time"
 )
+
+// DefaultMaxConcurrentRequests caps simultaneous API calls unless Config
+// says otherwise. The free LoadMaster rate-limits its API and drops
+// connections during the TLS handshake at around eight at once, while
+// Terraform runs up to ten operations in parallel by default.
+const DefaultMaxConcurrentRequests = 4
+
+// retryDelays are the waits before each retry of a request that never
+// reached the LoadMaster.
+var retryDelays = []time.Duration{250 * time.Millisecond, time.Second, 3 * time.Second}
 
 // Config holds connection settings for a LoadMaster.
 type Config struct {
@@ -24,6 +35,10 @@ type Config struct {
 	Password string
 	Insecure bool // skip TLS verification (LoadMasters often use self-signed certs)
 	Timeout  time.Duration
+
+	// MaxConcurrentRequests limits simultaneous API calls; 0 means
+	// DefaultMaxConcurrentRequests.
+	MaxConcurrentRequests int
 }
 
 // Client talks to a single LoadMaster.
@@ -34,10 +49,17 @@ type Client struct {
 	password string
 	http     *http.Client
 
+	// slots limits concurrent requests to Config.MaxConcurrentRequests.
+	slots chan struct{}
+
 	// subVSLocks serializes SubVS creation per parent, since the new SubVS
 	// is identified by diffing the parent's SubVS list.
 	subVSLocksMu sync.Mutex
 	subVSLocks   map[int]*sync.Mutex
+
+	// ruleMu serializes rule changes: concurrent rule writes can lose
+	// updates on the LoadMaster.
+	ruleMu sync.Mutex
 }
 
 // New builds a Client from Config.
@@ -59,6 +81,11 @@ func New(cfg Config) (*Client, error) {
 		host = "https://" + host
 	}
 
+	maxConcurrent := cfg.MaxConcurrentRequests
+	if maxConcurrent <= 0 {
+		maxConcurrent = DefaultMaxConcurrentRequests
+	}
+
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: cfg.Insecure} //nolint:gosec // user opt-in
 
@@ -68,6 +95,7 @@ func New(cfg Config) (*Client, error) {
 		username: cfg.Username,
 		password: cfg.Password,
 		http:     &http.Client{Timeout: timeout, Transport: transport},
+		slots:    make(chan struct{}, maxConcurrent),
 	}, nil
 }
 
@@ -119,13 +147,7 @@ func (c *Client) Do(ctx context.Context, cmd string, params map[string]any, out 
 		return fmt.Errorf("encoding request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.http.Do(req)
+	resp, err := c.send(ctx, payload)
 	if err != nil {
 		return fmt.Errorf("calling %s: %w", cmd, err)
 	}
@@ -161,4 +183,37 @@ func (c *Client) Do(ctx context.Context, cmd string, params map[string]any, out 
 		}
 	}
 	return nil
+}
+
+// send POSTs payload, holding one of the concurrency slots. A request that
+// failed before it was written (a refused or dropped connection, or a failed
+// TLS handshake) never reached the LoadMaster, so it is retried; once written,
+// a failure is returned as-is, since retrying could repeat a write.
+func (c *Client) send(ctx context.Context, payload []byte) (*http.Response, error) {
+	select {
+	case c.slots <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	defer func() { <-c.slots }()
+
+	for attempt := 0; ; attempt++ {
+		var wrote bool
+		trace := &httptrace.ClientTrace{WroteRequest: func(httptrace.WroteRequestInfo) { wrote = true }}
+		req, err := http.NewRequestWithContext(httptrace.WithClientTrace(ctx, trace), http.MethodPost, c.endpoint, bytes.NewReader(payload))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := c.http.Do(req)
+		if err == nil || wrote || attempt == len(retryDelays) || ctx.Err() != nil {
+			return resp, err
+		}
+		select {
+		case <-time.After(retryDelays[attempt]):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 }

@@ -151,20 +151,27 @@ func (c *Client) ListRules(ctx context.Context) ([]Rule, error) {
 	return out.all(), nil
 }
 
+// ruleWrite runs a rule change while holding ruleMu.
+func (c *Client) ruleWrite(ctx context.Context, cmd string, params map[string]any) error {
+	c.ruleMu.Lock()
+	defer c.ruleMu.Unlock()
+	return c.Do(ctx, cmd, params, nil)
+}
+
 // CreateRule adds a rule.
 func (c *Client) CreateRule(ctx context.Context, name string, p RuleParams) error {
-	return c.Do(ctx, "addrule", p.toMap(name), nil)
+	return c.ruleWrite(ctx, "addrule", p.toMap(name))
 }
 
 // UpdateRule replaces a rule's definition, including its type.
 func (c *Client) UpdateRule(ctx context.Context, name string, p RuleParams) error {
-	return c.Do(ctx, "modrule", p.toMap(name), nil)
+	return c.ruleWrite(ctx, "modrule", p.toMap(name))
 }
 
 // DeleteRule deletes a rule, detaching it from every virtual service and
 // real server that uses it.
 func (c *Client) DeleteRule(ctx context.Context, name string) error {
-	return c.Do(ctx, "delrule", map[string]any{"name": name}, nil)
+	return c.ruleWrite(ctx, "delrule", map[string]any{"name": name})
 }
 
 // RuleList identifies an ordered list of rules attached to a virtual service
@@ -199,7 +206,7 @@ func (l RuleList) call(ctx context.Context, c *Client, cmd, rule string) error {
 	for k, v := range l.params {
 		params[k] = v
 	}
-	return c.Do(ctx, cmd, params, nil)
+	return c.ruleWrite(ctx, cmd, params)
 }
 
 // SetRules changes the rules in l from current to desired, in order. Rules

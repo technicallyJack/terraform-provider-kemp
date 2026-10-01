@@ -5,11 +5,13 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
@@ -28,6 +30,8 @@ type kempProviderModel struct {
 	Username types.String `tfsdk:"username"`
 	Password types.String `tfsdk:"password"`
 	Insecure types.Bool   `tfsdk:"insecure"`
+
+	MaxConcurrentRequests types.Int64 `tfsdk:"max_concurrent_requests"`
 }
 
 // New returns a provider factory for the given version.
@@ -68,6 +72,13 @@ func (p *kempProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp 
 				Description: "Skip TLS certificate verification. May also be set with KEMP_INSECURE. Defaults to false.",
 				Optional:    true,
 			},
+			"max_concurrent_requests": schema.Int64Attribute{
+				Description: "Maximum simultaneous API calls to the LoadMaster. The free LoadMaster rate-limits " +
+					"its API and drops connections at around eight at once; licensed appliances may allow more. " +
+					"Requests that fail before reaching the LoadMaster are retried. Defaults to 4.",
+				Optional:   true,
+				Validators: []validator.Int64{int64validator.Between(1, 32)},
+			},
 		},
 	}
 }
@@ -81,7 +92,7 @@ func (p *kempProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 
 	for attr, v := range map[string]interface{ IsUnknown() bool }{
 		"host": cfg.Host, "api_key": cfg.APIKey, "username": cfg.Username,
-		"password": cfg.Password, "insecure": cfg.Insecure,
+		"password": cfg.Password, "insecure": cfg.Insecure, "max_concurrent_requests": cfg.MaxConcurrentRequests,
 	} {
 		if v.IsUnknown() {
 			resp.Diagnostics.AddAttributeError(path.Root(attr), "Unknown provider configuration value",
@@ -120,11 +131,12 @@ func (p *kempProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 	tflog.Debug(ctx, "Creating LoadMaster client")
 
 	c, err := client.New(client.Config{
-		Host:     host,
-		APIKey:   apiKey,
-		Username: username,
-		Password: password,
-		Insecure: insecure,
+		Host:                  host,
+		APIKey:                apiKey,
+		Username:              username,
+		Password:              password,
+		Insecure:              insecure,
+		MaxConcurrentRequests: int(cfg.MaxConcurrentRequests.ValueInt64()), // 0 (unset) means the default
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to create LoadMaster client", err.Error())
