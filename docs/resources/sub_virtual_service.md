@@ -3,12 +3,12 @@
 page_title: "kemp_sub_virtual_service Resource - kemp"
 subcategory: ""
 description: |-
-  Manages a SubVS: a child virtual service that sits behind a parent virtual service and has its own real servers, scheduling and health checks. Attach real servers to it with kemp_real_server, using this resource's index as virtual_service_index. A virtual service with SubVSs can't also have real servers of its own.
+  Manages a SubVS: a child virtual service that sits behind a parent virtual service and has its own real servers, scheduling and health checks. Attach real servers to it with kemp_real_server, using this resource's id as virtual_service_id. A virtual service with SubVSs can't also have real servers of its own.
 ---
 
 # kemp_sub_virtual_service (Resource)
 
-Manages a SubVS: a child virtual service that sits behind a parent virtual service and has its own real servers, scheduling and health checks. Attach real servers to it with kemp_real_server, using this resource's index as virtual_service_index. A virtual service with SubVSs can't also have real servers of its own.
+Manages a SubVS: a child virtual service that sits behind a parent virtual service and has its own real servers, scheduling and health checks. Attach real servers to it with kemp_real_server, using this resource's id as virtual_service_id. A virtual service with SubVSs can't also have real servers of its own.
 
 ## Example Usage
 
@@ -21,19 +21,19 @@ resource "kemp_virtual_service" "ingress" {
 }
 
 resource "kemp_sub_virtual_service" "cluster_a" {
-  parent_index = kemp_virtual_service.ingress.index
-  nickname     = "cluster_a"
-  type         = "http"
-  check_type   = "https"
-  check_port   = 30443
+  parent_id  = kemp_virtual_service.ingress.id
+  nickname   = "cluster_a"
+  type       = "http"
+  check_type = "https"
+  check_port = 30443
 }
 
 resource "kemp_real_server" "cluster_a" {
   for_each = toset(["10.0.254.30", "10.0.254.31", "10.0.254.32"])
 
-  virtual_service_index = kemp_sub_virtual_service.cluster_a.index
-  address               = each.value
-  port                  = 30443
+  virtual_service_id = kemp_sub_virtual_service.cluster_a.id
+  address            = each.value
+  port               = 30443
 }
 
 # Content switching: send /api/ requests on the same parent to their own SubVS.
@@ -44,10 +44,10 @@ resource "kemp_match_rule" "api" {
 }
 
 resource "kemp_sub_virtual_service" "api" {
-  parent_index = kemp_virtual_service.ingress.index
-  nickname     = "api"
-  type         = "http"
-  match_rules  = [kemp_match_rule.api.name]
+  parent_id   = kemp_virtual_service.ingress.id
+  nickname    = "api"
+  type        = "http"
+  match_rules = [kemp_match_rule.api.name]
 }
 ```
 
@@ -56,7 +56,7 @@ resource "kemp_sub_virtual_service" "api" {
 
 ### Required
 
-- `parent_index` (Number) Index of the parent virtual service. Changing this forces a new SubVS.
+- `parent_id` (String) id of the parent kemp_virtual_service. Changing this forces a new SubVS.
 
 ### Optional
 
@@ -80,8 +80,8 @@ resource "kemp_sub_virtual_service" "api" {
 
 ### Read-Only
 
-- `id` (String) The SubVS's virtual service index, as a string.
-- `index` (Number) LoadMaster-assigned virtual service index of the SubVS.
+- `id` (String) Stable reference to the SubVS, <parent id>/sub/<slot>, where slot is the SubVS's real server index on the parent. Use this to attach real servers.
+- `index` (Number) The LoadMaster's current virtual service index for the SubVS. Informational only: the LoadMaster renumbers virtual services whenever global configuration changes.
 
 <a id="nestedatt--persistence"></a>
 ### Nested Schema for `persistence`
@@ -104,7 +104,8 @@ Import is supported using the following syntax:
 The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
 
 ```shell
-# SubVSs are imported by their own virtual service index; the parent is
-# looked up automatically.
-terraform import kemp_sub_virtual_service.cluster_a 2
+# SubVSs are imported by <parent id>/sub/<slot>, where slot is the SubVS's
+# real server index on the parent. Its current virtual service index also
+# works, and is converted to that reference.
+terraform import kemp_sub_virtual_service.cluster_a tcp/10.0.253.2/443/sub/2
 ```

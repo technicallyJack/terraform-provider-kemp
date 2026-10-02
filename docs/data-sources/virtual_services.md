@@ -34,7 +34,8 @@ Read-Only:
 
 - `address` (String)
 - `enabled` (Boolean)
-- `index` (Number) LoadMaster-assigned virtual service index.
+- `id` (String) Stable reference: <protocol>/<address>/<port>, or <parent id>/sub/<slot> for a SubVS.
+- `index` (Number) Current index. It changes whenever the LoadMaster renumbers; use id to refer to virtual services.
 - `nickname` (String)
 - `parent_index` (Number) Index of the parent virtual service if this is a SubVS, otherwise 0.
 - `port` (String)

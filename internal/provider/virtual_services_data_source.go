@@ -30,6 +30,7 @@ type virtualServicesModel struct {
 }
 
 type virtualServiceModel struct {
+	ID       types.String `tfsdk:"id"`
 	Index    types.Int64  `tfsdk:"index"`
 	Nickname types.String `tfsdk:"nickname"`
 	Address  types.String `tfsdk:"address"`
@@ -53,7 +54,14 @@ func (d *virtualServicesDataSource) Schema(_ context.Context, _ datasource.Schem
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
-						"index":    schema.Int64Attribute{Computed: true, Description: "LoadMaster-assigned virtual service index."},
+						"id": schema.StringAttribute{
+							Computed:    true,
+							Description: "Stable reference: <protocol>/<address>/<port>, or <parent id>/sub/<slot> for a SubVS.",
+						},
+						"index": schema.Int64Attribute{
+							Computed:    true,
+							Description: "Current index. It changes whenever the LoadMaster renumbers; use id to refer to virtual services.",
+						},
 						"nickname": schema.StringAttribute{Computed: true},
 						"address":  schema.StringAttribute{Computed: true},
 						"port":     schema.StringAttribute{Computed: true},
@@ -92,9 +100,15 @@ func (d *virtualServicesDataSource) Read(ctx context.Context, _ datasource.ReadR
 		return
 	}
 
+	byIndex := map[int]*client.VirtualService{}
+	for i := range vss {
+		byIndex[vss[i].Index] = &vss[i]
+	}
+
 	state := virtualServicesModel{VirtualServices: make([]virtualServiceModel, 0, len(vss))}
 	for _, vs := range vss {
 		state.VirtualServices = append(state.VirtualServices, virtualServiceModel{
+			ID:       types.StringValue(refInList(&vs, byIndex)),
 			Index:    types.Int64Value(int64(vs.Index)),
 			Nickname: types.StringValue(vs.NickName),
 			Address:  types.StringValue(vs.VSAddress),
@@ -108,4 +122,24 @@ func (d *virtualServicesDataSource) Read(ctx context.Context, _ datasource.ReadR
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+}
+
+// refInList works out a virtual service's reference from a listvs result:
+// SubVSs are found through their parent's slot list.
+func refInList(vs *client.VirtualService, byIndex map[int]*client.VirtualService) string {
+	if vs.MasterVSID == 0 {
+		return client.RefOf(vs).String()
+	}
+	parent := byIndex[vs.MasterVSID]
+	if parent == nil {
+		return ""
+	}
+	for _, s := range parent.SubVS {
+		if s.VSIndex == vs.Index {
+			ref := client.RefOf(parent)
+			ref.SubSlot = s.RsIndex
+			return ref.String()
+		}
+	}
+	return ""
 }

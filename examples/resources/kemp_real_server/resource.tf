@@ -7,7 +7,7 @@ resource "kemp_virtual_service" "web" {
 resource "kemp_real_server" "web" {
   for_each = toset(["10.0.254.20", "10.0.254.21"])
 
-  virtual_service_index = kemp_virtual_service.web.index
-  address               = each.value
-  port                  = 8443
+  virtual_service_id = kemp_virtual_service.web.id
+  address            = each.value
+  port               = 8443
 }

@@ -26,6 +26,8 @@ var (
 	_ resource.ResourceWithConfigure      = &virtualServiceResource{}
 	_ resource.ResourceWithImportState    = &virtualServiceResource{}
 	_ resource.ResourceWithValidateConfig = &virtualServiceResource{}
+	_ resource.ResourceWithModifyPlan     = &virtualServiceResource{}
+	_ resource.ResourceWithUpgradeState   = &virtualServiceResource{}
 )
 
 // NewVirtualServiceResource returns the kemp_virtual_service resource.
@@ -54,15 +56,18 @@ func (r *virtualServiceResource) Metadata(_ context.Context, req resource.Metada
 func (r *virtualServiceResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description: "Manages a LoadMaster virtual service.",
+		Version:     1,
 		Attributes: serviceSettingsAttributes(map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Computed:      true,
-				Description:   "The virtual service index, as a string.",
+				Computed: true,
+				Description: "Stable reference to the virtual service, <protocol>/<address>/<port>. Use this, not " +
+					"index, to refer to the virtual service from other resources.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"index": schema.Int64Attribute{
-				Computed:      true,
-				Description:   "LoadMaster-assigned virtual service index.",
+				Computed: true,
+				Description: "The LoadMaster's current index for the virtual service. Informational only: the " +
+					"LoadMaster renumbers virtual services whenever global configuration changes.",
 				PlanModifiers: []planmodifier.Int64{int64planmodifier.UseStateForUnknown()},
 			},
 			"address": schema.StringAttribute{
@@ -93,6 +98,47 @@ func (r *virtualServiceResource) Schema(_ context.Context, _ resource.SchemaRequ
 
 func (r *virtualServiceResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	resp.Diagnostics.Append(validatePersistence(ctx, req.Config)...)
+}
+
+// ModifyPlan marks id unknown when the address or port changes, since the
+// reference is built from them.
+func (r *virtualServiceResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+	var plan, state virtualServiceResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if !plan.Address.Equal(state.Address) || !plan.Port.Equal(state.Port) {
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("id"), types.StringUnknown())...)
+	}
+}
+
+// UpgradeState converts state from before stable references (version 0),
+// whose id was the LoadMaster index. The reference is built from the address,
+// port and protocol already in state, so no API call is needed.
+func (r *virtualServiceResource) UpgradeState(ctx context.Context) map[int64]resource.StateUpgrader {
+	var current resource.SchemaResponse
+	r.Schema(ctx, resource.SchemaRequest{}, &current)
+	prior := current.Schema
+	prior.Version = 0
+	return map[int64]resource.StateUpgrader{
+		0: {
+			PriorSchema: &prior,
+			StateUpgrader: func(ctx context.Context, req resource.UpgradeStateRequest, resp *resource.UpgradeStateResponse) {
+				var m virtualServiceResourceModel
+				resp.Diagnostics.Append(req.State.Get(ctx, &m)...)
+				if resp.Diagnostics.HasError() {
+					return
+				}
+				m.ID = types.StringValue(m.ref().String())
+				resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
+			},
+		},
+	}
 }
 
 func (r *virtualServiceResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
@@ -126,16 +172,17 @@ func (r *virtualServiceResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
-	// Save the index first so a failure attaching rules leaves a tainted
+	// Save the reference first so a failure attaching rules leaves a tainted
 	// resource, not an orphan.
-	plan.ID = types.StringValue(strconv.Itoa(vs.Index))
+	ref := client.RefOf(vs)
+	plan.ID = types.StringValue(ref.String())
 	plan.Index = types.Int64Value(int64(vs.Index))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	resp.Diagnostics.Append(r.applyRules(ctx, vs, &plan)...)
+	resp.Diagnostics.Append(r.applyRules(ctx, ref, vs, &plan)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -146,7 +193,10 @@ func (r *virtualServiceResource) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
-	vs, err := r.client.GetVirtualService(ctx, int(state.Index.ValueInt64()))
+	// Found by address, port and protocol, never by the saved index, which
+	// may now belong to another virtual service. State from before stable
+	// references (id = the index) converts here on the first refresh.
+	vs, err := r.client.ResolveVS(ctx, state.ref())
 	if client.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
@@ -172,14 +222,24 @@ func (r *virtualServiceResource) Update(ctx context.Context, req resource.Update
 	params.Address = plan.Address.ValueStringPointer()
 	params.Port = plan.Port.ValueStringPointer()
 
-	vs, err := r.client.UpdateVirtualService(ctx, int(state.Index.ValueInt64()), params)
+	current, err := r.client.ResolveVS(ctx, state.ref())
+	if err != nil {
+		resp.Diagnostics.AddError("Unable to find virtual service", err.Error())
+		return
+	}
+	vs, err := r.client.UpdateVirtualService(ctx, current.Index, params)
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to update virtual service", err.Error())
 		return
 	}
+	newRef := plan.ref()
+	if err := client.CheckSame(newRef, vs, 0); err != nil {
+		resp.Diagnostics.AddError("Virtual service changed unexpectedly", err.Error())
+		return
+	}
 
-	plan.ID, plan.Index = state.ID, state.Index
-	resp.Diagnostics.Append(r.applyRules(ctx, vs, &plan)...)
+	plan.ID, plan.Index = types.StringValue(newRef.String()), types.Int64Value(int64(vs.Index))
+	resp.Diagnostics.Append(r.applyRules(ctx, newRef, vs, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -193,30 +253,54 @@ func (r *virtualServiceResource) Delete(ctx context.Context, req resource.Delete
 		return
 	}
 
-	err := r.client.DeleteVirtualService(ctx, int(state.Index.ValueInt64()))
-	if err != nil && !client.IsNotFound(err) {
+	// Deleting a virtual service also deletes its SubVSs and real servers.
+	vs, err := r.client.ResolveVS(ctx, state.ref())
+	if client.IsNotFound(err) {
+		return
+	}
+	if err != nil {
+		resp.Diagnostics.AddError("Unable to find virtual service", err.Error())
+		return
+	}
+	if err := r.client.DeleteVirtualService(ctx, vs.Index); err != nil && !client.IsNotFound(err) {
 		resp.Diagnostics.AddError("Unable to delete virtual service", err.Error())
 	}
 }
 
 func (r *virtualServiceResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	index, err := strconv.ParseInt(req.ID, 10, 64)
+	// Accepts the reference (tcp/10.0.0.1/443) or, for convenience, the
+	// virtual service's current index, which is converted to a reference.
+	ref, err := client.ParseVSRef(req.ID)
 	if err != nil {
-		resp.Diagnostics.AddError("Invalid import ID", fmt.Sprintf("Expected a virtual service index, got %q.", req.ID))
+		index, convErr := strconv.Atoi(req.ID)
+		if convErr != nil {
+			resp.Diagnostics.AddError("Invalid import ID",
+				fmt.Sprintf("Expected <protocol>/<address>/<port> or a virtual service index, got %q.", req.ID))
+			return
+		}
+		if ref, err = r.client.RefForIndex(ctx, index); err != nil {
+			resp.Diagnostics.AddError("Unable to find virtual service", err.Error())
+			return
+		}
+	}
+	if ref.SubSlot != 0 {
+		resp.Diagnostics.AddError("Not a virtual service", fmt.Sprintf("%s is a SubVS; import it as kemp_sub_virtual_service.", ref))
 		return
 	}
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("index"), index)...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), ref.String())...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("protocol"), ref.Protocol)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("address"), ref.Address)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("port"), ref.Port)...)
 }
 
 // applyRules attaches the planned rule lists to vs (as just returned by
 // addvs/modvs) and refreshes m from the LoadMaster.
-func (r *virtualServiceResource) applyRules(ctx context.Context, vs *client.VirtualService, m *virtualServiceResourceModel) diag.Diagnostics {
+func (r *virtualServiceResource) applyRules(ctx context.Context, ref client.VSRef, vs *client.VirtualService, m *virtualServiceResourceModel) diag.Diagnostics {
 	diags := setServiceRules(ctx, r.client, vs.Index, vs, &m.serviceSettingsModel)
 	if diags.HasError() {
 		return diags
 	}
-	fresh, err := r.client.GetVirtualService(ctx, vs.Index)
+	fresh, err := r.client.ResolveVS(ctx, ref)
 	if err != nil {
 		diags.AddError("Unable to read virtual service", err.Error())
 		return diags
@@ -225,8 +309,14 @@ func (r *virtualServiceResource) applyRules(ctx context.Context, vs *client.Virt
 	return diags
 }
 
+// ref is the virtual service's stable reference, from its identifying
+// attributes.
+func (m *virtualServiceResourceModel) ref() client.VSRef {
+	return client.VSRef{Protocol: m.Protocol.ValueString(), Address: m.Address.ValueString(), Port: m.Port.ValueString()}
+}
+
 func (m *virtualServiceResourceModel) fromAPI(vs *client.VirtualService) {
-	m.ID = types.StringValue(strconv.Itoa(vs.Index))
+	m.ID = types.StringValue(client.RefOf(vs).String())
 	m.Index = types.Int64Value(int64(vs.Index))
 	m.Address = types.StringValue(vs.VSAddress)
 	m.Port = types.StringValue(vs.VSPort)

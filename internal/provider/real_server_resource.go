@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -25,9 +26,10 @@ import (
 )
 
 var (
-	_ resource.Resource                = &realServerResource{}
-	_ resource.ResourceWithConfigure   = &realServerResource{}
-	_ resource.ResourceWithImportState = &realServerResource{}
+	_ resource.Resource                 = &realServerResource{}
+	_ resource.ResourceWithConfigure    = &realServerResource{}
+	_ resource.ResourceWithImportState  = &realServerResource{}
+	_ resource.ResourceWithUpgradeState = &realServerResource{}
 )
 
 // NewRealServerResource returns the kemp_real_server resource.
@@ -40,16 +42,16 @@ type realServerResource struct {
 }
 
 type realServerResourceModel struct {
-	ID                  types.String `tfsdk:"id"`
-	VirtualServiceIndex types.Int64  `tfsdk:"virtual_service_index"`
-	Index               types.Int64  `tfsdk:"index"`
-	Address             types.String `tfsdk:"address"`
-	Port                types.Int64  `tfsdk:"port"`
-	Forward             types.String `tfsdk:"forward"`
-	Weight              types.Int64  `tfsdk:"weight"`
-	Limit               types.Int64  `tfsdk:"limit"`
-	Enabled             types.Bool   `tfsdk:"enabled"`
-	MatchRules          types.List   `tfsdk:"match_rules"`
+	ID               types.String `tfsdk:"id"`
+	VirtualServiceID types.String `tfsdk:"virtual_service_id"`
+	Index            types.Int64  `tfsdk:"index"`
+	Address          types.String `tfsdk:"address"`
+	Port             types.Int64  `tfsdk:"port"`
+	Forward          types.String `tfsdk:"forward"`
+	Weight           types.Int64  `tfsdk:"weight"`
+	Limit            types.Int64  `tfsdk:"limit"`
+	Enabled          types.Bool   `tfsdk:"enabled"`
+	MatchRules       types.List   `tfsdk:"match_rules"`
 }
 
 func (r *realServerResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -58,21 +60,24 @@ func (r *realServerResource) Metadata(_ context.Context, req resource.MetadataRe
 
 func (r *realServerResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Manages a real server (backend) attached to a LoadMaster virtual service.",
+		Description: "Manages a real server (backend) attached to a LoadMaster virtual service or SubVS.",
+		Version:     1,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
-				Description:   "Identifier in the form `<virtual_service_index>/<index>`.",
+				Description:   "Stable reference to the real server, <virtual_service_id>/rs/<index>.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
-			"virtual_service_index": schema.Int64Attribute{
-				Required:      true,
-				Description:   "Index of the virtual service this real server belongs to. Changing this forces a new real server.",
-				PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()},
+			"virtual_service_id": schema.StringAttribute{
+				Required: true,
+				Description: "id of the kemp_virtual_service or kemp_sub_virtual_service this real server belongs to. " +
+					"Changing this forces a new real server.",
+				Validators:    []validator.String{vsRefValidator{allowTopLevel: true, allowSubVS: true}},
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"index": schema.Int64Attribute{
 				Computed:      true,
-				Description:   "LoadMaster-assigned real server index.",
+				Description:   "LoadMaster-assigned real server index. Unlike virtual service indexes, these stay fixed.",
 				PlanModifiers: []planmodifier.Int64{int64planmodifier.UseStateForUnknown()},
 			},
 			"address": schema.StringAttribute{
@@ -138,16 +143,25 @@ func (r *realServerResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	vsIndex := int(plan.VirtualServiceIndex.ValueInt64())
-	rs, err := r.client.CreateRealServer(ctx, vsIndex, plan.Address.ValueString(), int(plan.Port.ValueInt64()))
+	vsRef, err := client.ParseVSRef(plan.VirtualServiceID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid virtual_service_id", err.Error())
+		return
+	}
+	vs, err := r.client.ResolveVS(ctx, vsRef)
+	if err != nil {
+		resp.Diagnostics.AddError("Unable to find the virtual service", err.Error())
+		return
+	}
+	rs, err := r.client.CreateRealServer(ctx, vs.Index, plan.Address.ValueString(), int(plan.Port.ValueInt64()))
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to create real server", err.Error())
 		return
 	}
 
 	// addrs ignores some attributes, so apply them all with modrs. Save the
-	// index first so a failure here leaves a tainted resource, not an orphan.
-	plan.ID = types.StringValue(realServerID(vsIndex, rs.RsIndex))
+	// reference first so a failure here leaves a tainted resource, not an orphan.
+	plan.ID = types.StringValue(client.RSRef{VS: vsRef, RsIndex: rs.RsIndex}.String())
 	plan.Index = types.Int64Value(int64(rs.RsIndex))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -168,7 +182,12 @@ func (r *realServerResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	rs, err := r.client.GetRealServer(ctx, int(state.VirtualServiceIndex.ValueInt64()), int(state.Index.ValueInt64()))
+	ref, diags := r.ref(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	rs, err := r.read(ctx, ref)
 	if client.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
@@ -178,7 +197,7 @@ func (r *realServerResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	state.fromAPI(rs)
+	state.fromAPI(ref, rs)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -207,24 +226,52 @@ func (r *realServerResource) Delete(ctx context.Context, req resource.DeleteRequ
 	}
 
 	// Deleting the parent virtual service removes its real servers too.
-	err := r.client.DeleteRealServer(ctx, int(state.VirtualServiceIndex.ValueInt64()), int(state.Index.ValueInt64()))
-	if err != nil && !client.IsNotFound(err) {
+	if vsIndex, ok := legacyIndex(state.VirtualServiceID.ValueString()); ok {
+		if _, err := r.client.GetVirtualService(ctx, vsIndex); client.IsNotFound(err) {
+			return
+		}
+	}
+	ref, diags := r.ref(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	vs, err := r.client.ResolveVS(ctx, ref.VS)
+	if client.IsNotFound(err) {
+		return
+	}
+	if err != nil {
+		resp.Diagnostics.AddError("Unable to find the virtual service", err.Error())
+		return
+	}
+	if err := r.client.DeleteRealServer(ctx, vs.Index, ref.RsIndex); err != nil && !client.IsNotFound(err) {
 		resp.Diagnostics.AddError("Unable to delete real server", err.Error())
 	}
 }
 
 func (r *realServerResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	vs, rs, ok := strings.Cut(req.ID, "/")
-	vsIndex, err1 := strconv.ParseInt(vs, 10, 64)
-	rsIndex, err2 := strconv.ParseInt(rs, 10, 64)
-	if !ok || err1 != nil || err2 != nil {
-		resp.Diagnostics.AddError("Invalid import ID",
-			fmt.Sprintf("Expected <virtual_service_index>/<real_server_index>, got %q.", req.ID))
-		return
+	// Accepts the reference (tcp/10.0.0.1/443/rs/5) or, for convenience,
+	// <current virtual service index>/<real server index>.
+	ref, err := client.ParseRSRef(req.ID)
+	if err != nil {
+		vs, rs, ok := strings.Cut(req.ID, "/")
+		vsIndex, err1 := strconv.Atoi(vs)
+		rsIndex, err2 := strconv.Atoi(rs)
+		if !ok || err1 != nil || err2 != nil {
+			resp.Diagnostics.AddError("Invalid import ID",
+				fmt.Sprintf("Expected <virtual_service_id>/rs/<index> or <virtual service index>/<real server index>, got %q.", req.ID))
+			return
+		}
+		vsRef, err := r.client.RefForIndex(ctx, vsIndex)
+		if err != nil {
+			resp.Diagnostics.AddError("Unable to find the virtual service", err.Error())
+			return
+		}
+		ref = client.RSRef{VS: vsRef, RsIndex: rsIndex}
 	}
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("virtual_service_index"), vsIndex)...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("index"), rsIndex)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), ref.String())...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("virtual_service_id"), ref.VS.String())...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("index"), int64(ref.RsIndex))...)
 }
 
 // apply pushes the plan's settable attributes with modrs and refreshes the
@@ -232,7 +279,17 @@ func (r *realServerResource) ImportState(ctx context.Context, req resource.Impor
 // accept. NewPort is only sent when the port changed.
 func (r *realServerResource) apply(ctx context.Context, m *realServerResourceModel, portChanged bool) diag.Diagnostics {
 	var diags diag.Diagnostics
-	vsIndex, rsIndex := int(m.VirtualServiceIndex.ValueInt64()), int(m.Index.ValueInt64())
+	ref, err := client.ParseRSRef(m.ID.ValueString())
+	if err != nil {
+		diags.AddError("Invalid real server id", err.Error())
+		return diags
+	}
+	vs, err := r.client.ResolveVS(ctx, ref.VS)
+	if err != nil {
+		diags.AddError("Unable to find the virtual service", err.Error())
+		return diags
+	}
+	vsIndex, rsIndex := vs.Index, ref.RsIndex
 
 	weight, limit := int(m.Weight.ValueInt64()), int(m.Limit.ValueInt64())
 	params := client.RealServerParams{
@@ -266,13 +323,92 @@ func (r *realServerResource) apply(ctx context.Context, m *realServerResourceMod
 		diags.AddError("Unable to read real server after update", err.Error())
 		return diags
 	}
-	m.fromAPI(rs)
+	m.fromAPI(ref, rs)
 	return diags
 }
 
-func (m *realServerResourceModel) fromAPI(rs *client.RealServer) {
-	m.ID = types.StringValue(realServerID(rs.VSIndex, rs.RsIndex))
-	m.VirtualServiceIndex = types.Int64Value(int64(rs.VSIndex))
+// ref returns the real server's reference, converting state from before
+// stable references (see legacyPrefix) on the first refresh.
+func (r *realServerResource) ref(ctx context.Context, m *realServerResourceModel) (client.RSRef, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	if vsIndex, ok := legacyIndex(m.VirtualServiceID.ValueString()); ok {
+		vsRef, err := r.client.RefForIndex(ctx, vsIndex)
+		if err != nil {
+			diags.AddError("Unable to convert real server state to a stable reference", err.Error())
+			return client.RSRef{}, diags
+		}
+		return client.RSRef{VS: vsRef, RsIndex: int(m.Index.ValueInt64())}, diags
+	}
+	ref, err := client.ParseRSRef(m.ID.ValueString())
+	if err != nil {
+		diags.AddError("Invalid real server id", err.Error())
+	}
+	return ref, diags
+}
+
+// read looks up the real server's virtual service by reference, then the
+// real server itself.
+func (r *realServerResource) read(ctx context.Context, ref client.RSRef) (*client.RealServer, error) {
+	vs, err := r.client.ResolveVS(ctx, ref.VS)
+	if err != nil {
+		return nil, err
+	}
+	return r.client.GetRealServer(ctx, vs.Index, ref.RsIndex)
+}
+
+// UpgradeState converts state from before stable references (version 0),
+// which identified the virtual service by index. See legacyPrefix.
+func (r *realServerResource) UpgradeState(ctx context.Context) map[int64]resource.StateUpgrader {
+	var current resource.SchemaResponse
+	r.Schema(ctx, resource.SchemaRequest{}, &current)
+	attrs := maps.Clone(current.Schema.Attributes)
+	delete(attrs, "virtual_service_id")
+	attrs["virtual_service_index"] = schema.Int64Attribute{Required: true}
+	prior := schema.Schema{Attributes: attrs}
+
+	return map[int64]resource.StateUpgrader{
+		0: {
+			PriorSchema: &prior,
+			StateUpgrader: func(ctx context.Context, req resource.UpgradeStateRequest, resp *resource.UpgradeStateResponse) {
+				var old realServerModelV0
+				resp.Diagnostics.Append(req.State.Get(ctx, &old)...)
+				if resp.Diagnostics.HasError() {
+					return
+				}
+				upgraded := realServerResourceModel{
+					ID:               types.StringValue(legacyValue(old.VirtualServiceIndex.ValueInt64()) + "/" + strconv.FormatInt(old.Index.ValueInt64(), 10)),
+					VirtualServiceID: types.StringValue(legacyValue(old.VirtualServiceIndex.ValueInt64())),
+					Index:            old.Index,
+					Address:          old.Address,
+					Port:             old.Port,
+					Forward:          old.Forward,
+					Weight:           old.Weight,
+					Limit:            old.Limit,
+					Enabled:          old.Enabled,
+					MatchRules:       old.MatchRules,
+				}
+				resp.Diagnostics.Append(resp.State.Set(ctx, &upgraded)...)
+			},
+		},
+	}
+}
+
+type realServerModelV0 struct {
+	ID                  types.String `tfsdk:"id"`
+	VirtualServiceIndex types.Int64  `tfsdk:"virtual_service_index"`
+	Index               types.Int64  `tfsdk:"index"`
+	Address             types.String `tfsdk:"address"`
+	Port                types.Int64  `tfsdk:"port"`
+	Forward             types.String `tfsdk:"forward"`
+	Weight              types.Int64  `tfsdk:"weight"`
+	Limit               types.Int64  `tfsdk:"limit"`
+	Enabled             types.Bool   `tfsdk:"enabled"`
+	MatchRules          types.List   `tfsdk:"match_rules"`
+}
+
+func (m *realServerResourceModel) fromAPI(ref client.RSRef, rs *client.RealServer) {
+	m.ID = types.StringValue(ref.String())
+	m.VirtualServiceID = types.StringValue(ref.VS.String())
 	m.Index = types.Int64Value(int64(rs.RsIndex))
 	m.Address = types.StringValue(rs.Addr)
 	m.Port = types.Int64Value(int64(rs.Port))
@@ -281,8 +417,4 @@ func (m *realServerResourceModel) fromAPI(rs *client.RealServer) {
 	m.Limit = types.Int64Value(int64(rs.Limit))
 	m.Enabled = types.BoolValue(rs.Enable)
 	m.MatchRules = stringList(rs.MatchRules)
-}
-
-func realServerID(vsIndex, rsIndex int) string {
-	return fmt.Sprintf("%d/%d", vsIndex, rsIndex)
 }

@@ -87,8 +87,8 @@ resource "kemp_header_rule" "server" {
 
 ### Read-Only
 
-- `id` (String) The virtual service index, as a string.
-- `index` (Number) LoadMaster-assigned virtual service index.
+- `id` (String) Stable reference to the virtual service, <protocol>/<address>/<port>. Use this, not index, to refer to the virtual service from other resources.
+- `index` (Number) The LoadMaster's current index for the virtual service. Informational only: the LoadMaster renumbers virtual services whenever global configuration changes.
 
 <a id="nestedatt--persistence"></a>
 ### Nested Schema for `persistence`
@@ -111,6 +111,7 @@ Import is supported using the following syntax:
 The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
 
 ```shell
-# Virtual services are imported by their LoadMaster index.
-terraform import kemp_virtual_service.web 3
+# Virtual services are imported by <protocol>/<address>/<port>. Their current
+# LoadMaster index also works, and is converted to that reference.
+terraform import kemp_virtual_service.web tcp/10.0.253.50/443
 ```

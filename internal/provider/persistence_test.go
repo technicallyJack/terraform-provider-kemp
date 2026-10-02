@@ -71,7 +71,7 @@ resource "kemp_virtual_service" "test" {
 }
 
 resource "kemp_sub_virtual_service" "test" {
-  parent_index = kemp_virtual_service.test.index
+  parent_id    = kemp_virtual_service.test.id
   nickname     = "tf-acc-persist-sub"
   persistence = {
     mode    = "src"

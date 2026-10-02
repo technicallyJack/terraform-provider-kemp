@@ -65,14 +65,14 @@ resource "kemp_virtual_service" "parent" {
 }
 
 resource "kemp_sub_virtual_service" "api" {
-  parent_index = kemp_virtual_service.parent.index
+  parent_id = kemp_virtual_service.parent.id
   nickname     = "tf-acc-rules-api"
   type         = "http"
   %[3]s
 }
 
 resource "kemp_real_server" "api" {
-  virtual_service_index = kemp_sub_virtual_service.api.index
+  virtual_service_id    = kemp_sub_virtual_service.api.id
   address               = %[5]q
   port                  = 18080
 }
@@ -85,7 +85,7 @@ resource "kemp_virtual_service" "plain" {
 }
 
 resource "kemp_real_server" "plain" {
-  virtual_service_index = kemp_virtual_service.plain.index
+  virtual_service_id    = kemp_virtual_service.plain.id
   address               = %[5]q
   port                  = 18080
   %[4]s

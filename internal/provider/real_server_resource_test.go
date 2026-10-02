@@ -30,7 +30,7 @@ resource "kemp_virtual_service" "test" {
 }
 
 resource "kemp_real_server" "test" {
-  virtual_service_index = kemp_virtual_service.test.index
+  virtual_service_id    = kemp_virtual_service.test.id
   address               = %q
   %s
 }
@@ -44,7 +44,7 @@ resource "kemp_real_server" "test" {
 			{
 				Config: config(rsAddr, `port = 18080`),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrPair("kemp_real_server.test", "virtual_service_index", "kemp_virtual_service.test", "index"),
+					resource.TestCheckResourceAttrPair("kemp_real_server.test", "virtual_service_id", "kemp_virtual_service.test", "id"),
 					resource.TestCheckResourceAttr("kemp_real_server.test", "address", rsAddr),
 					resource.TestCheckResourceAttr("kemp_real_server.test", "port", "18080"),
 					resource.TestCheckResourceAttr("kemp_real_server.test", "forward", "nat"),

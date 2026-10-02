@@ -26,6 +26,27 @@ make test       # unit tests
 make testacc    # acceptance tests against a real LoadMaster
 ```
 
+## Identifying objects
+
+The LoadMaster renumbers its virtual services whenever global configuration changes (a certificate or cipher set change, for example), so its indexes can't identify anything for long. The provider uses stable references instead and looks up the current index right before each call:
+
+| Object | `id` |
+|---|---|
+| virtual service | `<protocol>/<address>/<port>`, e.g. `tcp/10.0.253.2/443` |
+| SubVS | `<parent id>/sub/<slot>`, where slot is the SubVS's real server index on the parent |
+| real server | `<virtual service or SubVS id>/rs/<index>` (real server indexes don't change) |
+
+Refer to virtual services and SubVSs from other resources by `id`. The `index` attributes are informational only.
+
+## Upgrading from 0.1.x
+
+0.2.0 replaces index references with stable ones:
+
+- `kemp_sub_virtual_service`: `parent_index = kemp_virtual_service.x.index` becomes `parent_id = kemp_virtual_service.x.id`
+- `kemp_real_server`: `virtual_service_index = ….index` becomes `virtual_service_id = ….id`
+
+Existing state converts on its own: change the configuration, then run a normal `terraform plan`/`apply`. The first refresh turns the saved indexes into references, with nothing replaced. Do this before anything renumbers the appliance, while the saved indexes are still correct, and don't use `-refresh=false` for that first run.
+
 ## Releases
 
 Releases are automatic. Every push to `main` on Gitea runs `.gitea/workflows/release.yaml`, which:

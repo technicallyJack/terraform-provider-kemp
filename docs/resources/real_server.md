@@ -3,12 +3,12 @@
 page_title: "kemp_real_server Resource - kemp"
 subcategory: ""
 description: |-
-  Manages a real server (backend) attached to a LoadMaster virtual service.
+  Manages a real server (backend) attached to a LoadMaster virtual service or SubVS.
 ---
 
 # kemp_real_server (Resource)
 
-Manages a real server (backend) attached to a LoadMaster virtual service.
+Manages a real server (backend) attached to a LoadMaster virtual service or SubVS.
 
 ## Example Usage
 
@@ -22,9 +22,9 @@ resource "kemp_virtual_service" "web" {
 resource "kemp_real_server" "web" {
   for_each = toset(["10.0.254.20", "10.0.254.21"])
 
-  virtual_service_index = kemp_virtual_service.web.index
-  address               = each.value
-  port                  = 8443
+  virtual_service_id = kemp_virtual_service.web.id
+  address            = each.value
+  port               = 8443
 }
 ```
 
@@ -35,7 +35,7 @@ resource "kemp_real_server" "web" {
 
 - `address` (String) IP address of the real server. Changing this forces a new real server.
 - `port` (Number) Port on the real server that traffic is forwarded to.
-- `virtual_service_index` (Number) Index of the virtual service this real server belongs to. Changing this forces a new real server.
+- `virtual_service_id` (String) id of the kemp_virtual_service or kemp_sub_virtual_service this real server belongs to. Changing this forces a new real server.
 
 ### Optional
 
@@ -47,8 +47,8 @@ resource "kemp_real_server" "web" {
 
 ### Read-Only
 
-- `id` (String) Identifier in the form `<virtual_service_index>/<index>`.
-- `index` (Number) LoadMaster-assigned real server index.
+- `id` (String) Stable reference to the real server, <virtual_service_id>/rs/<index>.
+- `index` (Number) LoadMaster-assigned real server index. Unlike virtual service indexes, these stay fixed.
 
 ## Import
 
@@ -57,6 +57,7 @@ Import is supported using the following syntax:
 The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
 
 ```shell
-# Real servers are imported as <virtual_service_index>/<real_server_index>.
-terraform import kemp_real_server.web 3/5
+# Real servers are imported by <virtual service or SubVS id>/rs/<index>.
+# <current virtual service index>/<real server index> also works.
+terraform import kemp_real_server.web tcp/10.0.253.50/443/rs/5
 ```

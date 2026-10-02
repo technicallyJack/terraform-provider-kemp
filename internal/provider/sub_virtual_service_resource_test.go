@@ -37,7 +37,7 @@ resource "kemp_virtual_service" "parent" {
 	sub := func(name, schedule string, weight int, enabled bool) string {
 		return fmt.Sprintf(`
 resource "kemp_sub_virtual_service" %[1]q {
-  parent_index = kemp_virtual_service.parent.index
+  parent_id = kemp_virtual_service.parent.id
   nickname     = %[1]q
   type         = "http"
   schedule     = %[2]q
@@ -48,7 +48,7 @@ resource "kemp_sub_virtual_service" %[1]q {
 }
 
 resource "kemp_real_server" %[1]q {
-  virtual_service_index = kemp_sub_virtual_service.%[1]s.index
+  virtual_service_id    = kemp_sub_virtual_service.%[1]s.id
   address               = %[5]q
   port                  = 18080
 }
@@ -62,15 +62,15 @@ resource "kemp_real_server" %[1]q {
 			{
 				Config: parent + sub("sub_a", "lc", 500, true) + sub("sub_b", "rr", 1000, true),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrPair("kemp_sub_virtual_service.sub_a", "parent_index", "kemp_virtual_service.parent", "index"),
-					resource.TestCheckResourceAttrPair("kemp_sub_virtual_service.sub_b", "parent_index", "kemp_virtual_service.parent", "index"),
+					resource.TestCheckResourceAttrPair("kemp_sub_virtual_service.sub_a", "parent_id", "kemp_virtual_service.parent", "id"),
+					resource.TestCheckResourceAttrPair("kemp_sub_virtual_service.sub_b", "parent_id", "kemp_virtual_service.parent", "id"),
 					resource.TestCheckResourceAttr("kemp_sub_virtual_service.sub_a", "nickname", "sub_a"),
 					resource.TestCheckResourceAttr("kemp_sub_virtual_service.sub_a", "schedule", "lc"),
 					resource.TestCheckResourceAttr("kemp_sub_virtual_service.sub_a", "weight", "500"),
 					resource.TestCheckResourceAttr("kemp_sub_virtual_service.sub_a", "check_path", "/healthz"),
 					resource.TestCheckResourceAttr("kemp_sub_virtual_service.sub_b", "nickname", "sub_b"),
-					resource.TestCheckResourceAttrPair("kemp_real_server.sub_a", "virtual_service_index", "kemp_sub_virtual_service.sub_a", "index"),
-					resource.TestCheckResourceAttrPair("kemp_real_server.sub_b", "virtual_service_index", "kemp_sub_virtual_service.sub_b", "index"),
+					resource.TestCheckResourceAttrPair("kemp_real_server.sub_a", "virtual_service_id", "kemp_sub_virtual_service.sub_a", "id"),
+					resource.TestCheckResourceAttrPair("kemp_real_server.sub_b", "virtual_service_id", "kemp_sub_virtual_service.sub_b", "id"),
 				),
 			},
 			{
