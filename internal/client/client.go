@@ -59,9 +59,10 @@ type Client struct {
 	subVSLocksMu sync.Mutex
 	subVSLocks   map[int]*sync.Mutex
 
-	// ruleMu serializes rule changes: concurrent rule writes can lose
-	// updates on the LoadMaster.
-	ruleMu sync.Mutex
+	// globalMu serializes changes to global configuration (rules,
+	// certificates, intermediates, cipher sets): concurrent rule writes were
+	// seen losing updates. Some of these also renumber virtual services.
+	globalMu sync.Mutex
 }
 
 // New builds a Client from Config.
@@ -218,4 +219,11 @@ func (c *Client) send(ctx context.Context, payload []byte) (*http.Response, erro
 			return nil, ctx.Err()
 		}
 	}
+}
+
+// globalWrite runs a change to global configuration while holding globalMu.
+func (c *Client) globalWrite(ctx context.Context, cmd string, params map[string]any) error {
+	c.globalMu.Lock()
+	defer c.globalMu.Unlock()
+	return c.Do(ctx, cmd, params, nil)
 }

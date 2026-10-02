@@ -58,6 +58,45 @@ func init() {
 		},
 	})
 
+	// Certificates and intermediates named tfacc_*, and the test cipher sets.
+	resource.AddTestSweepers("kemp_certificate", &resource.Sweeper{
+		Name:         "kemp_certificate",
+		Dependencies: []string{"kemp_virtual_service"}, // in use certificates can't be deleted
+		F: func(_ string) error {
+			c, err := sweeperClient()
+			if err != nil {
+				return err
+			}
+			ctx := context.Background()
+			certs, err := c.ListCertificates(ctx)
+			if err != nil {
+				return err
+			}
+			for _, cert := range certs {
+				if strings.HasPrefix(cert.Name, "tfacc_") {
+					fmt.Printf("sweeping certificate %s\n", cert.Name)
+					_ = c.DeleteCertificate(ctx, cert.Name)
+				}
+			}
+			ints, err := c.ListIntermediates(ctx)
+			if err != nil {
+				return err
+			}
+			for _, cert := range ints {
+				if strings.HasPrefix(cert.Name, "tfacc_") {
+					fmt.Printf("sweeping intermediate %s\n", cert.Name)
+					_ = c.DeleteIntermediate(ctx, cert.Name)
+				}
+			}
+			for _, cs := range []string{"tfacc_cs", "tfacc_cs_ssl"} { // no listing command exists
+				if err := c.DeleteCipherSet(ctx, cs); err == nil {
+					fmt.Printf("sweeping cipher set %s\n", cs)
+				}
+			}
+			return nil
+		},
+	})
+
 	resource.AddTestSweepers("kemp_virtual_service", &resource.Sweeper{
 		Name: "kemp_virtual_service",
 		F: func(_ string) error {

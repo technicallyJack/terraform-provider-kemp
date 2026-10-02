@@ -49,7 +49,7 @@ Existing state converts on its own: change the configuration, then run a normal 
 
 ## Documentation
 
-`make generate` builds `docs/` from the schemas, `examples/` and the templates in `templates/`. Each resource and data source has a template whose only purpose is to set its registry sidebar `subcategory` (Virtual Services, Rules, ...); a new resource needs one too, copied from a sibling in the same group.
+`make generate` builds `docs/` from the schemas, `examples/` and the templates in `templates/`. Each resource and data source has a template whose only purpose is to set its registry sidebar `subcategory` (Virtual Services, Rules, SSL/TLS, ...); a new resource needs one too, copied from a sibling in the same group.
 
 ## Releases
 
@@ -97,7 +97,11 @@ Then run `make install` and use `terraform plan` (skip `terraform init`) in any 
 - `kemp_real_server`: manages a real server on a virtual service or SubVS
 - `kemp_match_rule`: content matching rule (URL or header) for content switching and flags
 - `kemp_header_rule`: adds, deletes or replaces an HTTP header
-- `kemp_url_rule`: rewrites the request URL (address, port, forward, weight, limit, enabled)
+- `kemp_url_rule`: rewrites the request URL
+- `kemp_certificate`: TLS certificate with a write-only private key; replaced in place on renewal
+- `kemp_intermediate_certificate`: chain certificate, also trusted for client certificate authentication
+- `kemp_cipher_set`: custom cipher set
+- `ssl` block on `kemp_virtual_service`: offload, certificates (SNI), TLS versions, cipher set, re-encryption, HTTP/2, client certificates (address, port, forward, weight, limit, enabled)
 
 ## Acceptance tests
 

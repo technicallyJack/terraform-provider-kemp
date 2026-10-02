@@ -18,6 +18,13 @@ resource "kemp_virtual_service" "web" {
     timeout     = 1800
   }
 
+  ssl = {
+    certificates = [kemp_certificate.web.name]
+    tls_versions = ["1.2", "1.3"]
+    cipher_set   = "BestPractices"
+    http2        = true
+  }
+
   # Rules run in list order. Reference the rule resources' names so they are
   # created before being attached.
   request_rules  = [kemp_url_rule.legacy.name, kemp_header_rule.env.name]

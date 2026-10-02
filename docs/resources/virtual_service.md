@@ -33,6 +33,13 @@ resource "kemp_virtual_service" "web" {
     timeout     = 1800
   }
 
+  ssl = {
+    certificates = [kemp_certificate.web.name]
+    tls_versions = ["1.2", "1.3"]
+    cipher_set   = "BestPractices"
+    http2        = true
+  }
+
   # Rules run in list order. Reference the rule resources' names so they are
   # created before being attached.
   request_rules  = [kemp_url_rule.legacy.name, kemp_header_rule.env.name]
@@ -83,6 +90,7 @@ resource "kemp_header_rule" "server" {
 - `request_rules` (List of String) Names of the rules to apply to requests (header changes, URL rewrites), applied in order. Accepts add header rules, delete header rules, replace header rules, modify URL rules. Reference the rule resources' name attributes so Terraform creates rules before attaching them. Reordering detaches and re-attaches the rules from the first moved one onward, briefly leaving them off; adding rules at the end or removing rules causes no gap.
 - `response_rules` (List of String) Names of the rules to apply to responses, applied in order. Accepts add header rules, delete header rules, replace header rules, modify URL rules. Reference the rule resources' name attributes so Terraform creates rules before attaching them. Reordering detaches and re-attaches the rules from the first moved one onward, briefly leaving them off; adding rules at the end or removing rules causes no gap.
 - `schedule` (String) Scheduling method: rr (round robin), wrr (weighted round robin), lc (least connection), wlc (weighted least connection), fixed (fixed weighting), sh (source IP hash) or dl (weighted response time). Defaults to rr.
+- `ssl` (Attributes) SSL offload. Leave out to turn SSL off. Only for top-level virtual services: a SubVS receives traffic its parent has already decrypted. (see [below for nested schema](#nestedatt--ssl))
 - `type` (String) Service type: gen, http, http2, ts, tls or log. Defaults to gen.
 
 ### Read-Only
@@ -103,6 +111,23 @@ Optional:
 - `header_name` (String) Request header to hash, for the header mode. Required for header.
 - `query_parameter` (String) Query string parameter to hash, for the query-hash mode. Required for query-hash.
 - `timeout` (Number) Seconds a client stays with the same real server, 60-604800. Defaults to 360. (The LoadMaster treats anything under 60 as turning persistence off.)
+
+
+<a id="nestedatt--ssl"></a>
+### Nested Schema for `ssl`
+
+Required:
+
+- `certificates` (List of String) Names of kemp_certificate certificates to serve. With several, the LoadMaster picks one by SNI. (Turning SSL on without any makes the LoadMaster generate a self-signed certificate, so at least one is required.)
+
+Optional:
+
+- `cipher_set` (String) Cipher set: a built-in one (Default, BestPractices, Intermediate_compatibility, ...) or a kemp_cipher_set. Defaults to Default.
+- `client_certificate` (String) Client certificate authentication: none, or required (clients must present a certificate signed by one of the LoadMaster's intermediate certificates, see kemp_intermediate_certificate), optionally passing it to the real servers: required_add_headers, required_pass_der_ssl_client_cert, required_pass_der_x_client_cert, required_pass_pem_ssl_client_cert or required_pass_pem_x_client_cert (header formats as labelled by Kemp). Defaults to none.
+- `http2` (Boolean) Allow HTTP/2 from clients. Defaults to false.
+- `pass_sni` (Boolean) Pass the client's SNI hostname on to the real servers. Requires reencrypt. Defaults to false.
+- `reencrypt` (Boolean) Re-encrypt traffic to the real servers. Defaults to false.
+- `tls_versions` (Set of String) TLS versions to accept: any of 1.0, 1.1, 1.2, 1.3. Defaults to the LoadMaster's default, 1.1-1.3. SSLv3 is always off.
 
 ## Import
 

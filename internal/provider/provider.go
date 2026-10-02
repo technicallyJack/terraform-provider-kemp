@@ -156,6 +156,9 @@ func (p *kempProvider) Resources(_ context.Context) []func() resource.Resource {
 		NewMatchRuleResource,
 		NewHeaderRuleResource,
 		NewURLRuleResource,
+		NewCertificateResource,
+		NewIntermediateCertificateResource,
+		NewCipherSetResource,
 	}
 }
 

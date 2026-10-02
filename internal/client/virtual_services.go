@@ -31,6 +31,17 @@ type VirtualService struct {
 	Cookie         string `json:"Cookie"`         // cookie name, or header name for header persistence
 	QueryTag       string `json:"QueryTag"`       // query parameter for query-hash persistence
 
+	// SSL settings; only meaningful while SSLAcceleration is on (turning it
+	// off clears CertFile, the rest keep their values).
+	SSLAcceleration bool   `json:"SSLAcceleration"`
+	CertFile        string `json:"CertFile"` // space-separated certificate names
+	TlsType         string `json:"TlsType"`  // bitmask of *disabled* versions: 1 SSLv3, 2 TLS1.0, 4 TLS1.1, 8 TLS1.2, 16 TLS1.3
+	CipherSet       string `json:"CipherSet"`
+	SSLReencrypt    bool   `json:"SSLReencrypt"`
+	AllowHTTP2      bool   `json:"AllowHTTP2"`
+	PassSni         bool   `json:"PassSni"`
+	ClientCert      int    `json:"ClientCert"` // 0 none, 1-6 required (2-6 also pass it to real servers)
+
 	RequestRules    []string `json:"RequestRules"` // omitted by the API when empty
 	ResponseRules   []string `json:"ResponseRules"`
 	PreProcessRules []string `json:"PreProcessRules"`
@@ -63,6 +74,15 @@ type VirtualServiceParams struct {
 	PersistTimeout *string
 	Cookie         *string // "" clears it
 	QueryTag       *string // "" clears it
+
+	SSLAcceleration *bool
+	CertFile        *string
+	TlsType         *int
+	CipherSet       *string
+	SSLReencrypt    *bool
+	AllowHTTP2      *bool
+	PassSni         *bool
+	ClientCert      *int
 }
 
 func (p VirtualServiceParams) toMap() map[string]any {
@@ -108,6 +128,27 @@ func (p VirtualServiceParams) toMap() map[string]any {
 	}
 	if p.QueryTag != nil {
 		m["QueryTag"] = *p.QueryTag
+	}
+	setBool := func(k string, v *bool) {
+		if v != nil {
+			m[k] = *v
+		}
+	}
+	setBool("SSLAcceleration", p.SSLAcceleration)
+	setBool("SSLReencrypt", p.SSLReencrypt)
+	setBool("AllowHTTP2", p.AllowHTTP2)
+	setBool("PassSni", p.PassSni)
+	if p.CertFile != nil {
+		m["CertFile"] = *p.CertFile
+	}
+	if p.TlsType != nil {
+		m["TlsType"] = strconv.Itoa(*p.TlsType)
+	}
+	if p.CipherSet != nil {
+		m["CipherSet"] = *p.CipherSet
+	}
+	if p.ClientCert != nil {
+		m["ClientCert"] = strconv.Itoa(*p.ClientCert)
 	}
 	return m
 }

@@ -46,6 +46,7 @@ type virtualServiceResourceModel struct {
 	Port     types.String `tfsdk:"port"`
 	Protocol types.String `tfsdk:"protocol"`
 	Enabled  types.Bool   `tfsdk:"enabled"`
+	SSL      *sslModel    `tfsdk:"ssl"`
 	serviceSettingsModel
 }
 
@@ -92,12 +93,14 @@ func (r *virtualServiceResource) Schema(_ context.Context, _ resource.SchemaRequ
 				Default:     booldefault.StaticBool(true),
 				Description: "Whether the virtual service is enabled. Defaults to true.",
 			},
+			"ssl": sslAttribute(),
 		}),
 	}
 }
 
 func (r *virtualServiceResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	resp.Diagnostics.Append(validatePersistence(ctx, req.Config)...)
+	resp.Diagnostics.Append(validateSSL(ctx, req.Config)...)
 }
 
 // ModifyPlan marks id unknown when the address or port changes, since the
@@ -293,10 +296,14 @@ func (r *virtualServiceResource) ImportState(ctx context.Context, req resource.I
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("port"), ref.Port)...)
 }
 
-// applyRules attaches the planned rule lists to vs (as just returned by
-// addvs/modvs) and refreshes m from the LoadMaster.
+// applyRules applies the planned SSL settings and rule lists to vs (as just
+// returned by addvs/modvs) and refreshes m from the LoadMaster.
 func (r *virtualServiceResource) applyRules(ctx context.Context, ref client.VSRef, vs *client.VirtualService, m *virtualServiceResourceModel) diag.Diagnostics {
-	diags := setServiceRules(ctx, r.client, vs.Index, vs, &m.serviceSettingsModel)
+	diags := applySSL(ctx, r.client, ref, vs, m.SSL)
+	if diags.HasError() {
+		return diags
+	}
+	diags.Append(setServiceRules(ctx, r.client, vs.Index, vs, &m.serviceSettingsModel)...)
 	if diags.HasError() {
 		return diags
 	}
@@ -322,6 +329,7 @@ func (m *virtualServiceResourceModel) fromAPI(vs *client.VirtualService) {
 	m.Port = types.StringValue(vs.VSPort)
 	m.Protocol = types.StringValue(vs.Protocol)
 	m.Enabled = types.BoolValue(vs.Enable)
+	m.SSL = sslFromAPI(vs)
 	m.serviceSettingsModel.fromAPI(vs)
 }
 

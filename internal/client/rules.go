@@ -151,11 +151,9 @@ func (c *Client) ListRules(ctx context.Context) ([]Rule, error) {
 	return out.all(), nil
 }
 
-// ruleWrite runs a rule change while holding ruleMu.
+// ruleWrite runs a rule change; rule changes are global writes.
 func (c *Client) ruleWrite(ctx context.Context, cmd string, params map[string]any) error {
-	c.ruleMu.Lock()
-	defer c.ruleMu.Unlock()
-	return c.Do(ctx, cmd, params, nil)
+	return c.globalWrite(ctx, cmd, params)
 }
 
 // CreateRule adds a rule.
