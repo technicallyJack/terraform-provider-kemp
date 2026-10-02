@@ -15,7 +15,7 @@ examples/                     example configs (also used by tfplugindocs)
 
 - Go 1.23+
 - Terraform 1.5+
-- A LoadMaster with the API enabled (Certificates & Security > Remote Access > Enable API Interface)
+- A LoadMaster with the API enabled (Certificates & Security > Remote Access > Enable API Interface). The free edition works; note that its licence caps load-balanced traffic at 20 Mbps, which affects your services, not the provider.
 
 ## Building
 
@@ -46,6 +46,10 @@ Refer to virtual services and SubVSs from other resources by `id`. The `index` a
 - `kemp_real_server`: `virtual_service_index = ….index` becomes `virtual_service_id = ….id`
 
 Existing state converts on its own: change the configuration, then run a normal `terraform plan`/`apply`. The first refresh turns the saved indexes into references, with nothing replaced. Do this before anything renumbers the appliance, while the saved indexes are still correct, and don't use `-refresh=false` for that first run.
+
+## Documentation
+
+`make generate` builds `docs/` from the schemas, `examples/` and the templates in `templates/`. Each resource and data source has a template whose only purpose is to set its registry sidebar `subcategory` (Virtual Services, Rules, ...); a new resource needs one too, copied from a sibling in the same group.
 
 ## Releases
 

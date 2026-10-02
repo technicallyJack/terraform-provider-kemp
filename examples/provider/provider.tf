@@ -13,7 +13,8 @@ provider "kemp" {
   api_key  = var.kemp_api_key
   insecure = true
 
-  # The free LoadMaster rate-limits its API; licensed appliances may allow more.
+  # The management API drops connections when it gets too many at once; larger
+  # appliances may cope with more.
   # max_concurrent_requests = 4
 }
 

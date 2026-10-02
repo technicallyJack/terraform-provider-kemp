@@ -18,9 +18,11 @@ import (
 )
 
 // DefaultMaxConcurrentRequests caps simultaneous API calls unless Config
-// says otherwise. The free LoadMaster rate-limits its API and drops
-// connections during the TLS handshake at around eight at once, while
-// Terraform runs up to ten operations in parallel by default.
+// says otherwise. The LoadMaster's management interface drops connections
+// when it gets too many at once (around eight on a busy free LoadMaster, 16
+// on an idle one), while Terraform runs up to ten operations in parallel by
+// default. This is separate from the free edition's 20 Mbps licence limit,
+// which applies to load-balanced traffic, not to API calls.
 const DefaultMaxConcurrentRequests = 4
 
 // retryDelays are the waits before each retry of a request that never

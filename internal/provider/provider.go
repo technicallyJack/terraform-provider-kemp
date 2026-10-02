@@ -73,9 +73,10 @@ func (p *kempProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp 
 				Optional:    true,
 			},
 			"max_concurrent_requests": schema.Int64Attribute{
-				Description: "Maximum simultaneous API calls to the LoadMaster. The free LoadMaster rate-limits " +
-					"its API and drops connections at around eight at once; licensed appliances may allow more. " +
-					"Requests that fail before reaching the LoadMaster are retried. Defaults to 4.",
+				Description: "Maximum simultaneous API calls to the LoadMaster. Its management interface drops " +
+					"connections when it gets too many at once (in testing, around eight on a busy free " +
+					"LoadMaster and 16 on an idle one); larger appliances may cope with more. Requests that " +
+					"fail before reaching the LoadMaster are retried. Defaults to 4.",
 				Optional:   true,
 				Validators: []validator.Int64{int64validator.Between(1, 32)},
 			},

@@ -27,7 +27,8 @@ provider "kemp" {
   api_key  = var.kemp_api_key
   insecure = true
 
-  # The free LoadMaster rate-limits its API; licensed appliances may allow more.
+  # The management API drops connections when it gets too many at once; larger
+  # appliances may cope with more.
   # max_concurrent_requests = 4
 }
 
@@ -45,6 +46,6 @@ variable "kemp_api_key" {
 - `api_key` (String, Sensitive) LoadMaster API key. May also be set with KEMP_API_KEY. Takes precedence over username/password.
 - `host` (String) LoadMaster hostname or IP (optionally with port). May also be set with KEMP_HOST.
 - `insecure` (Boolean) Skip TLS certificate verification. May also be set with KEMP_INSECURE. Defaults to false.
-- `max_concurrent_requests` (Number) Maximum simultaneous API calls to the LoadMaster. The free LoadMaster rate-limits its API and drops connections at around eight at once; licensed appliances may allow more. Requests that fail before reaching the LoadMaster are retried. Defaults to 4.
+- `max_concurrent_requests` (Number) Maximum simultaneous API calls to the LoadMaster. Its management interface drops connections when it gets too many at once (in testing, around eight on a busy free LoadMaster and 16 on an idle one); larger appliances may cope with more. Requests that fail before reaching the LoadMaster are retried. Defaults to 4.
 - `password` (String, Sensitive) LoadMaster password. May also be set with KEMP_PASSWORD.
 - `username` (String) LoadMaster username. May also be set with KEMP_USERNAME.
