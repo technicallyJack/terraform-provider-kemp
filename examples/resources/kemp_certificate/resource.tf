@@ -7,6 +7,7 @@ ephemeral "vault_kv_secret_v2" "web_key" {
 
 resource "kemp_certificate" "web" {
   name                   = "web_example_com"
+  admin_certificate      = false # true: also serve it on the LoadMaster's own web UI and API
   certificate            = file("${path.module}/web.example.com.crt")
   private_key_wo         = ephemeral.vault_kv_secret_v2.web_key.data["private_key"]
   private_key_wo_version = 1 # bump to push a new key with the same certificate

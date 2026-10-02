@@ -110,3 +110,32 @@ func (c *Client) SetCipherSet(ctx context.Context, name string, ciphers []string
 func (c *Client) DeleteCipherSet(ctx context.Context, name string) error {
 	return c.globalWrite(ctx, "delcipherset", map[string]any{"name": name})
 }
+
+// noAdminCertificate is what "get param=admincert" reports when none is set.
+const noAdminCertificate = "No Admin Certificate assigned"
+
+type adminCertResponse struct {
+	AdminCert string `json:"admincert"`
+}
+
+// GetAdminCertificate returns the name of the certificate the web UI and API
+// use, or "" when none is assigned.
+func (c *Client) GetAdminCertificate(ctx context.Context) (string, error) {
+	var out adminCertResponse
+	if err := c.Do(ctx, "get", map[string]any{"param": "admincert"}, &out); err != nil {
+		return "", err
+	}
+	if out.AdminCert == noAdminCertificate {
+		return "", nil
+	}
+	return out.AdminCert, nil
+}
+
+// SetAdminCertificate makes the named certificate the one the web UI and API
+// use. Replacing a certificate in place (AddCertificate with replace) drops
+// this assignment, while the web server keeps serving the old certificate from
+// memory, so callers re-assign after every replacement. Needs a user with All
+// Permissions.
+func (c *Client) SetAdminCertificate(ctx context.Context, name string) error {
+	return c.globalWrite(ctx, "set", map[string]any{"param": "admincert", "value": name})
+}

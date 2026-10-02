@@ -22,6 +22,7 @@ ephemeral "vault_kv_secret_v2" "web_key" {
 
 resource "kemp_certificate" "web" {
   name                   = "web_example_com"
+  admin_certificate      = false # true: also serve it on the LoadMaster's own web UI and API
   certificate            = file("${path.module}/web.example.com.crt")
   private_key_wo         = ephemeral.vault_kv_secret_v2.web_key.data["private_key"]
   private_key_wo_version = 1 # bump to push a new key with the same certificate
@@ -45,6 +46,7 @@ output "web_certificate_expires" {
 
 ### Optional
 
+- `admin_certificate` (Boolean) Use this certificate for the LoadMaster's own web UI and API. The LoadMaster drops this assignment whenever the certificate is replaced (while still serving the old one from memory until a restart), so the provider re-assigns it after every replacement and checks it on every refresh. Needs a LoadMaster user with All Permissions. Setting it back to false doesn't unassign the certificate. Defaults to false.
 - `private_key_wo_version` (Number) Change this to push private_key_wo again without changing the certificate. Terraform can't see changes to write-only values, so a new key with the same certificate needs a new version.
 
 ### Read-Only

@@ -201,3 +201,35 @@ func newTestServer(t *testing.T, body string) *httptest.Server {
 		_, _ = w.Write([]byte(body))
 	}))
 }
+
+func TestAdminCertificate(t *testing.T) {
+	assigned := ""
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		switch {
+		case b["cmd"] == "set" && b["param"] == "admincert":
+			assigned = b["value"].(string)
+			_, _ = w.Write([]byte(`{"code":200,"status":"ok"}`))
+		case b["cmd"] == "get" && b["param"] == "admincert":
+			v := assigned
+			if v == "" {
+				v = noAdminCertificate
+			}
+			_, _ = w.Write([]byte(`{"code":200,"status":"ok","admincert":"` + v + `"}`))
+		}
+	}))
+	defer srv.Close()
+	c, _ := New(Config{Host: srv.URL, APIKey: "k", Insecure: true})
+	ctx := context.Background()
+
+	if got, err := c.GetAdminCertificate(ctx); err != nil || got != "" {
+		t.Fatalf("unassigned: %q %v", got, err)
+	}
+	if err := c.SetAdminCertificate(ctx, "kemp_cert"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := c.GetAdminCertificate(ctx); err != nil || got != "kemp_cert" {
+		t.Fatalf("assigned: %q %v", got, err)
+	}
+}
