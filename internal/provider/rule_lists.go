@@ -29,6 +29,7 @@ var (
 	requestRuleList    = ruleListKind{"request_rules", []int{client.RuleTypeAddHeader, client.RuleTypeDeleteHeader, client.RuleTypeReplaceHeader, client.RuleTypeModifyURL}}
 	responseRuleList   = ruleListKind{"response_rules", []int{client.RuleTypeAddHeader, client.RuleTypeDeleteHeader, client.RuleTypeReplaceHeader, client.RuleTypeModifyURL}}
 	preProcessRuleList = ruleListKind{"pre_process_rules", []int{client.RuleTypeMatch}}
+	bodyRuleList       = ruleListKind{"response_body_rules", []int{client.RuleTypeReplaceBody}}
 	matchRuleList      = ruleListKind{"match_rules", []int{client.RuleTypeMatch}}
 )
 
@@ -118,5 +119,6 @@ func setServiceRules(ctx context.Context, c *client.Client, index int, current *
 	diags.Append(setRuleList(ctx, c, requestRuleList, client.VSRequestRules(index), current.RequestRules, m.RequestRules)...)
 	diags.Append(setRuleList(ctx, c, responseRuleList, client.VSResponseRules(index), current.ResponseRules, m.ResponseRules)...)
 	diags.Append(setRuleList(ctx, c, preProcessRuleList, client.VSPreProcessRules(index), current.PreProcessRules, m.PreProcessRules)...)
+	diags.Append(setRuleList(ctx, c, bodyRuleList, client.VSResponseBodyRules(index), current.MatchBodyRules, m.ResponseBodyRules)...)
 	return diags
 }

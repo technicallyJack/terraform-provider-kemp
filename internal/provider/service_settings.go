@@ -43,9 +43,10 @@ type serviceSettingsModel struct {
 
 	Persistence *persistenceModel `tfsdk:"persistence"`
 
-	RequestRules    types.List `tfsdk:"request_rules"`
-	ResponseRules   types.List `tfsdk:"response_rules"`
-	PreProcessRules types.List `tfsdk:"pre_process_rules"`
+	RequestRules      types.List `tfsdk:"request_rules"`
+	ResponseRules     types.List `tfsdk:"response_rules"`
+	PreProcessRules   types.List `tfsdk:"pre_process_rules"`
+	ResponseBodyRules types.List `tfsdk:"response_body_rules"`
 }
 
 // forwardedHeaderModes are the AddVia values 0-6, in order. Verified with a
@@ -194,6 +195,8 @@ func serviceSettingsAttributes(extra map[string]schema.Attribute) map[string]sch
 		"request_rules":     ruleListAttribute(requestRuleList, "apply to requests (header changes, URL rewrites)"),
 		"response_rules":    ruleListAttribute(responseRuleList, "apply to responses"),
 		"pre_process_rules": ruleListAttribute(preProcessRuleList, "evaluate before content switching, typically to set flags"),
+		"response_body_rules": ruleListAttribute(bodyRuleList,
+			"apply to response bodies (each rule matches the original body, so rules don't see each other's replacements)"),
 	}
 	for k, v := range extra {
 		attrs[k] = v
@@ -230,6 +233,7 @@ func (m *serviceSettingsModel) fromAPI(vs *client.VirtualService) {
 	m.RequestRules = stringList(vs.RequestRules)
 	m.ResponseRules = stringList(vs.ResponseRules)
 	m.PreProcessRules = stringList(vs.PreProcessRules)
+	m.ResponseBodyRules = stringList(vs.MatchBodyRules)
 }
 
 // params returns the modvs parameters for these settings, except the service

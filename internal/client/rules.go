@@ -189,6 +189,11 @@ func VSResponseRules(vs int) RuleList {
 	return RuleList{"addresponserule", "delresponserule", map[string]any{"vs": strconv.Itoa(vs)}}
 }
 
+// VSResponseBodyRules is a virtual service's list of body replacement rules.
+func VSResponseBodyRules(vs int) RuleList {
+	return RuleList{"addresponsebodyrule", "delresponsebodyrule", map[string]any{"vs": strconv.Itoa(vs)}}
+}
+
 func VSPreProcessRules(vs int) RuleList {
 	return RuleList{"addprerule", "delprerule", map[string]any{"vs": strconv.Itoa(vs)}}
 }

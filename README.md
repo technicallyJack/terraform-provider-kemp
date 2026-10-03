@@ -98,6 +98,7 @@ Then run `make install` and use `terraform plan` (skip `terraform init`) in any 
 - `kemp_match_rule`: content matching rule (URL or header) for content switching and flags
 - `kemp_header_rule`: adds, deletes or replaces an HTTP header
 - `kemp_url_rule`: rewrites the request URL
+- `kemp_body_rule`: replaces text in response bodies (attached with `response_body_rules`)
 - `kemp_certificate`: TLS certificate with a write-only private key; replaced in place on renewal
 - `kemp_intermediate_certificate`: chain certificate, also trusted for client certificate authentication
 - `kemp_cipher_set`: custom cipher set
