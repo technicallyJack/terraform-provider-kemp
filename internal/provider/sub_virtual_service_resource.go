@@ -311,6 +311,10 @@ func (r *subVirtualServiceResource) apply(ctx context.Context, m *subVirtualServ
 		return diags
 	}
 	parentIndex := sub.MasterVSID
+	if sub, err = setTypeFirst(ctx, r.client, sub, &m.serviceSettingsModel); err != nil {
+		diags.AddError("Unable to change the service type", err.Error())
+		return diags
+	}
 
 	// modvs rejects Enable for SubVSs; it's part of the parent-side slot.
 	vs, err := r.client.UpdateVirtualService(ctx, sub.Index, m.serviceSettingsModel.params())

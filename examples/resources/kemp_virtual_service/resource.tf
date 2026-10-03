@@ -12,6 +12,13 @@ resource "kemp_virtual_service" "web" {
   check_method     = "GET"
   check_use_http11 = true
 
+  # What the real servers see: the client's address in X-Forwarded-For, and
+  # connections from the LoadMaster's address on their subnet.
+  forwarded_headers  = "x_forwarded_for"
+  subnet_originating = true
+  compress           = true
+  idle_timeout       = 300
+
   persistence = {
     mode        = "cookie"
     cookie_name = "JSESSIONID"

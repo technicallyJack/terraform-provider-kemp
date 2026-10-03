@@ -26,6 +26,14 @@ type VirtualService struct {
 	CheckUseGet    int    `json:"CheckUseGet"` // 0 = HEAD, 1 = GET, 2 = POST
 	CheckUseHTTP11 bool   `json:"CheckUse1.1"`
 
+	Transparent       bool `json:"Transparent"`
+	SubnetOriginating bool `json:"SubnetOriginating"`
+	AddVia            int  `json:"AddVia"`   // 0-6, which X-Forwarded-For/Via/X-ClientSide headers to add
+	Idletime          int  `json:"Idletime"` // seconds, 1-86400 (0 is stored as the default, 660)
+	Cache             bool `json:"Cache"`
+	Compress          bool `json:"Compress"`
+	ForceL7           bool `json:"ForceL7"` // off means ForceL4; only matters for gen services
+
 	Persist        string `json:"Persist"`        // omitted by the API when persistence is off
 	PersistTimeout string `json:"PersistTimeout"` // seconds; "0" when off
 	Cookie         string `json:"Cookie"`         // cookie name, or header name for header persistence
@@ -66,6 +74,14 @@ type VirtualServiceParams struct {
 	CheckHost      *string // "" clears it
 	CheckUseGet    *int
 	CheckUseHTTP11 *bool
+
+	Transparent       *bool
+	SubnetOriginating *bool
+	AddVia            *int
+	Idletime          *int
+	Cache             *bool
+	Compress          *bool
+	ForceL7           *bool
 
 	// Persist "none" turns persistence off. Don't send PersistTimeout with
 	// it: any timeout of 60+ while persistence is off enables source IP
@@ -133,6 +149,17 @@ func (p VirtualServiceParams) toMap() map[string]any {
 		if v != nil {
 			m[k] = *v
 		}
+	}
+	setBool("Transparent", p.Transparent)
+	setBool("SubnetOriginating", p.SubnetOriginating)
+	setBool("Cache", p.Cache)
+	setBool("Compress", p.Compress)
+	setBool("ForceL7", p.ForceL7)
+	if p.AddVia != nil {
+		m["AddVia"] = strconv.Itoa(*p.AddVia)
+	}
+	if p.Idletime != nil {
+		m["Idletime"] = strconv.Itoa(*p.Idletime)
 	}
 	setBool("SSLAcceleration", p.SSLAcceleration)
 	setBool("SSLReencrypt", p.SSLReencrypt)

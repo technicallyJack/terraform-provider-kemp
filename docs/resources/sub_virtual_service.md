@@ -60,13 +60,18 @@ resource "kemp_sub_virtual_service" "api" {
 
 ### Optional
 
+- `cache` (Boolean) Cache static content on the LoadMaster (http services). Defaults to false.
 - `check_host` (String) Host header sent by http/https health checks.
 - `check_method` (String) HTTP method used by http/https health checks: HEAD, GET or POST. Defaults to HEAD.
 - `check_path` (String) URL path requested by http/https health checks, e.g. /healthz.
 - `check_port` (Number) Port to health check. 0 (the default) checks each real server on its own port; otherwise 3-65530.
 - `check_type` (String) Health check type for the real servers. Defaults to tcp; none disables checks.
 - `check_use_http11` (Boolean) Use HTTP/1.1 for http/https health checks. Defaults to false (HTTP/1.0).
+- `compress` (Boolean) Gzip responses for clients that accept it (http services). Defaults to false.
 - `enabled` (Boolean) Whether the parent sends traffic to this SubVS. Defaults to true.
+- `force_l7` (Boolean) Handle gen services at layer 7. Turning it off makes them layer 4, which is always transparent and can't add headers. Other service types are always layer 7. Defaults to true.
+- `forwarded_headers` (String) Headers carrying the client's address to the real servers (layer 7 services): x_forwarded_for, x_forwarded_for_and_via, x_clientside ("client:port -> vip:port"), x_clientside_and_via, via (Via only), none, or legacy (the LoadMaster's default). Defaults to legacy.
+- `idle_timeout` (Number) Seconds an idle connection is kept open, 1-86400. Defaults to 660.
 - `limit` (Number) Maximum number of open connections the parent sends to this SubVS. 0 means unlimited.
 - `match_rules` (List of String) Names of the rules to evaluate on the parent for content switching: the parent only sends a request to this SubVS when one matches, applied in order. Accepts match rules. Reference the rule resources' name attributes so Terraform creates rules before attaching them. Reordering detaches and re-attaches the rules from the first moved one onward, briefly leaving them off; adding rules at the end or removing rules causes no gap.
 - `nickname` (String) Display name.
@@ -75,6 +80,8 @@ resource "kemp_sub_virtual_service" "api" {
 - `request_rules` (List of String) Names of the rules to apply to requests (header changes, URL rewrites), applied in order. Accepts add header rules, delete header rules, replace header rules, modify URL rules. Reference the rule resources' name attributes so Terraform creates rules before attaching them. Reordering detaches and re-attaches the rules from the first moved one onward, briefly leaving them off; adding rules at the end or removing rules causes no gap.
 - `response_rules` (List of String) Names of the rules to apply to responses, applied in order. Accepts add header rules, delete header rules, replace header rules, modify URL rules. Reference the rule resources' name attributes so Terraform creates rules before attaching them. Reordering detaches and re-attaches the rules from the first moved one onward, briefly leaving them off; adding rules at the end or removing rules causes no gap.
 - `schedule` (String) Scheduling method: rr (round robin), wrr (weighted round robin), lc (least connection), wlc (weighted least connection), fixed (fixed weighting), sh (source IP hash) or dl (weighted response time). Defaults to rr.
+- `subnet_originating` (Boolean) When not transparent, connect to the real servers from the LoadMaster's own address on their subnet rather than from the virtual service's address. If unset, the LoadMaster's current setting is kept.
+- `transparent` (Boolean) Keep the client's IP address as the source of connections to the real servers. The real servers must then route replies back through the LoadMaster; the LoadMaster doesn't use transparency for clients on the real server's own network. If unset, the LoadMaster's current setting is kept. Adding a SubVS switches its parent to transparent (and subnet_originating off); if these are set on the parent, the next apply puts them back.
 - `type` (String) Service type: gen, http, http2, ts, tls or log. Defaults to gen.
 - `weight` (Number) Relative weight within the parent's weighted scheduling methods. Defaults to 1000.
 

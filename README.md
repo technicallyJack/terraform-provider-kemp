@@ -92,7 +92,7 @@ Then run `make install` and use `terraform plan` (skip `terraform init`) in any 
 
 ## Resources
 
-- `kemp_virtual_service`: manages a virtual service (address, port, protocol, nickname, enabled, type, scheduling method, health checks, persistence)
+- `kemp_virtual_service`: manages a virtual service (address, port, protocol, nickname, enabled, type, scheduling method, health checks, persistence, transparency, forwarded headers, idle timeout, caching, compression)
 - `kemp_sub_virtual_service`: manages a SubVS behind a parent virtual service (same settings as a virtual service, plus weight, limit and enabled on the parent)
 - `kemp_real_server`: manages a real server on a virtual service or SubVS
 - `kemp_match_rule`: content matching rule (URL or header) for content switching and flags
@@ -107,5 +107,7 @@ Then run `make install` and use `terraform plan` (skip `terraform init`) in any 
 
 Set `KEMP_HOST`, `KEMP_API_KEY` (or username/password) and `KEMP_INSECURE` as needed, then `make testacc`.
 Resource tests also need `KEMP_TEST_VS_ADDRESS`: an unused IP the LoadMaster can claim. They are skipped without it.
+Set `KEMP_TEST_ECHO_ADDRESS` to this machine's address as the LoadMaster sees it to also check real traffic: the proxy settings test then runs a header-echoing real server on port 18090 and verifies forwarded headers, source addresses and compression through the VIP.
+
 Rule tests only create `tfacc_*` rules, which do nothing until attached. `make sweep` also removes leftover `tfacc_*` rules.
 Real server tests point backends at `KEMP_TEST_RS_ADDRESS` and the next address up (default `10.0.254.250`/`.251`); those only receive health checks.

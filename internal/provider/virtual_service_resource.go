@@ -164,15 +164,25 @@ func (r *virtualServiceResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
-	params := plan.params()
-	params.Address = plan.Address.ValueStringPointer()
-	params.Port = plan.Port.ValueStringPointer()
-	params.Protocol = plan.Protocol.ValueStringPointer()
-
-	vs, err := r.client.CreateVirtualService(ctx, params)
+	// Created with just its identity and type; everything else follows in a
+	// separate request, after the type (see serviceSettingsModel.params).
+	vs, err := r.client.CreateVirtualService(ctx, client.VirtualServiceParams{
+		Address:  plan.Address.ValueStringPointer(),
+		Port:     plan.Port.ValueStringPointer(),
+		Protocol: plan.Protocol.ValueStringPointer(),
+		NickName: plan.Nickname.ValueStringPointer(),
+		VSType:   plan.Type.ValueStringPointer(),
+	})
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to create virtual service", err.Error())
 		return
+	}
+	if configured, err := r.client.UpdateVirtualService(ctx, vs.Index, plan.params()); err != nil {
+		// Still save the reference below, so the resource is tainted rather
+		// than orphaned.
+		resp.Diagnostics.AddError("Unable to configure virtual service", err.Error())
+	} else {
+		vs = configured
 	}
 
 	// Save the reference first so a failure attaching rules leaves a tainted
@@ -228,6 +238,10 @@ func (r *virtualServiceResource) Update(ctx context.Context, req resource.Update
 	current, err := r.client.ResolveVS(ctx, state.ref())
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to find virtual service", err.Error())
+		return
+	}
+	if current, err = setTypeFirst(ctx, r.client, current, &plan.serviceSettingsModel); err != nil {
+		resp.Diagnostics.AddError("Unable to change the service type", err.Error())
 		return
 	}
 	vs, err := r.client.UpdateVirtualService(ctx, current.Index, params)

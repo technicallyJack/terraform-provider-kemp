@@ -121,7 +121,9 @@ resource "kemp_real_server" "plain" {
 			},
 			// The parent has a pre-processing rule, so this also reads through
 			// the firmware JSON repair.
-			{ResourceName: parent, ImportState: true, ImportStateVerify: true},
+			// Creating the SubVS switched the parent to transparent after its
+			// state was saved; a refresh picks that up, the import sees it first.
+			{ResourceName: parent, ImportState: true, ImportStateVerify: true, ImportStateVerifyIgnore: []string{"transparent", "subnet_originating"}},
 			{ResourceName: sub, ImportState: true, ImportStateVerify: true},
 			{ResourceName: rs, ImportState: true, ImportStateVerify: true},
 			{

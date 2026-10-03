@@ -114,6 +114,9 @@ resource "kemp_sub_virtual_service" "test" {
 				ResourceName:      name,
 				ImportState:       true,
 				ImportStateVerify: true,
+				// Creating the SubVS switched the parent to transparent after its
+				// state was saved; a refresh picks that up, the import sees it first.
+				ImportStateVerifyIgnore: []string{"transparent", "subnet_originating"},
 			},
 			{
 				// The cookie name and header name share one API field.
