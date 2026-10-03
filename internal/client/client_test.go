@@ -93,9 +93,11 @@ func TestIsNotFound(t *testing.T) {
 
 func TestVirtualServiceRequestParams(t *testing.T) {
 	var got map[string]any
+	seen := map[string]map[string]any{}
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got = nil
 		_ = json.NewDecoder(r.Body).Decode(&got)
+		seen[got["cmd"].(string)] = got
 		_, _ = w.Write([]byte(`{"code":200,"status":"ok","Index":7,"VSAddress":"10.0.0.5","VSPort":"80","Protocol":"tcp","NickName":"t","Enable":true,"VStype":"gen"}`))
 	}))
 	defer srv.Close()
@@ -110,10 +112,15 @@ func TestVirtualServiceRequestParams(t *testing.T) {
 	if err != nil || vs.Index != 7 {
 		t.Fatalf("create: %v %+v", err, vs)
 	}
-	for k, v := range map[string]any{"cmd": "addvs", "vs": "10.0.0.5", "port": "80", "prot": "tcp", "NickName": "t", "Enable": true, "VStype": "gen"} {
-		if got[k] != v {
-			t.Errorf("addvs %s = %v, want %v", k, got[k], v)
+	addvs := seen["addvs"]
+	for k, v := range map[string]any{"vs": "10.0.0.5", "port": "80", "prot": "tcp", "NickName": "t", "Enable": true, "VStype": "gen"} {
+		if addvs[k] != v {
+			t.Errorf("addvs %s = %v, want %v", k, addvs[k], v)
 		}
+	}
+	// The result comes from looking the virtual service up by address.
+	if show := seen["showvs"]; show["vs"] != "10.0.0.5" || show["port"] != "80" || show["prot"] != "tcp" {
+		t.Errorf("expected a showvs lookup by address/port/protocol, got %v", show)
 	}
 
 	if _, err := c.UpdateVirtualService(context.Background(), 7, VirtualServiceParams{Address: str("10.0.0.6"), Port: str("81")}); err != nil {

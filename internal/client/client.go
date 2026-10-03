@@ -59,6 +59,11 @@ type Client struct {
 	subVSLocksMu sync.Mutex
 	subVSLocks   map[int]*sync.Mutex
 
+	// createMu serializes addvs: concurrent calls were seen returning the same
+	// index for two virtual services and losing one of them while reporting
+	// success (7.2.63). addrs and createsubvs showed no such problem.
+	createMu sync.Mutex
+
 	// globalMu serializes changes to global configuration (rules,
 	// certificates, intermediates, cipher sets): concurrent rule writes were
 	// seen losing updates. Some of these also renumber virtual services.

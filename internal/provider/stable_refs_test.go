@@ -105,7 +105,7 @@ resource "kemp_virtual_service" "other" {
 `, addr, subWeight, rsAddr, otherNick)
 	}
 
-	var subIndexBefore string
+	var indexesBefore map[string]int
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -117,8 +117,8 @@ resource "kemp_virtual_service" "other" {
 					resource.TestMatchResourceAttr("kemp_sub_virtual_service.sub", "id", regexp.MustCompile(`^tcp/`+regexp.QuoteMeta(addr)+`/18080/sub/\d+$`)),
 					resource.TestCheckResourceAttrPair("kemp_sub_virtual_service.sub", "parent_id", "kemp_virtual_service.parent", "id"),
 					resource.TestMatchResourceAttr("kemp_real_server.sub", "id", regexp.MustCompile(`/sub/\d+/rs/\d+$`)),
-					func(s *terraform.State) error {
-						subIndexBefore = s.RootModule().Resources["kemp_sub_virtual_service.sub"].Primary.Attributes["index"]
+					func(*terraform.State) error {
+						indexesBefore = testObjectIndexes(t, c)
 						return nil
 					},
 				),
@@ -132,8 +132,12 @@ resource "kemp_virtual_service" "other" {
 						t.Fatalf("creating out-of-band virtual service: %v", err)
 					}
 					testAccRenumber(t, c)
-					if sub := findVS(t, c, "tf-acc-renum-sub", ""); sub == nil || fmt.Sprint(sub.Index) == subIndexBefore {
-						t.Fatalf("expected the SubVS to move from index %s after renumbering, got %+v", subIndexBefore, sub)
+					// Which objects move depends on what else is on the appliance,
+					// but at least one of the test's own must have, or the step
+					// below proves nothing.
+					after := testObjectIndexes(t, c)
+					if fmt.Sprint(after) == fmt.Sprint(indexesBefore) {
+						t.Fatalf("renumbering didn't move any test object: %v", after)
 					}
 				},
 				Config:   config(1000, "tf-acc-renum-other"),
@@ -186,6 +190,11 @@ resource "kemp_virtual_service" "plain" {
   address  = %[1]q
   port     = "18081"
   nickname = "tf-acc-upgrade-plain"
+
+  # v0.1.0 creates virtual services concurrently, which the LoadMaster can
+  # get wrong (TestAccParallelCreates); one at a time keeps this test about
+  # the state upgrade.
+  depends_on = [kemp_virtual_service.parent]
 }
 `, addr)
 	oldConfig := common + fmt.Sprintf(`
@@ -261,6 +270,19 @@ resource "kemp_real_server" "plain" {
 
 func ptr(s string) *string { return &s }
 
+// testObjectIndexes returns the current indexes of TestAccStableReferences'
+// virtual services, by nickname.
+func testObjectIndexes(t *testing.T, c *client.Client) map[string]int {
+	t.Helper()
+	out := map[string]int{}
+	for _, n := range []string{"tf-acc-renum-parent", "tf-acc-renum-sub", "tf-acc-renum-other"} {
+		if vs := findVS(t, c, n, ""); vs != nil {
+			out[n] = vs.Index
+		}
+	}
+	return out
+}
+
 // LoadMaster objects that must survive the upgrade: real server indexes never
 // change, and the SubVS is recognisable by its nickname and its real server.
 var upgradeTracked = []string{"kemp_real_server.sub", "kemp_real_server.plain"}
@@ -283,4 +305,50 @@ func sameObjects(m map[string]string) resource.TestCheckFunc {
 		}
 		return nil
 	}
+}
+
+// TestAccParallelCreates creates several virtual services in one apply with
+// no dependencies between them, so Terraform creates them concurrently.
+// Concurrent addvs calls on the LoadMaster can lose a virtual service while
+// reporting success; the client serializes them and checks each one exists.
+func TestAccParallelCreates(t *testing.T) {
+	addr := os.Getenv("KEMP_TEST_VS_ADDRESS")
+	if addr == "" {
+		t.Skip("KEMP_TEST_VS_ADDRESS not set")
+	}
+	c, err := sweeperClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const n = 6
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "kemp_virtual_service" "test" {
+  count    = %d
+  address  = %q
+  port     = tostring(18300 + count.index)
+  nickname = "tf-acc-parallel-${count.index}"
+}
+`, n, addr),
+				Check: func(s *terraform.State) error {
+					for i := 0; i < n; i++ {
+						port := fmt.Sprint(18300 + i)
+						vs := findVS(t, c, fmt.Sprintf("tf-acc-parallel-%d", i), addr)
+						if vs == nil || vs.VSPort != port {
+							return fmt.Errorf("virtual service %d (port %s) missing or wrong on the LoadMaster: %+v", i, port, vs)
+						}
+						got := s.RootModule().Resources[fmt.Sprintf("kemp_virtual_service.test.%d", i)].Primary.Attributes["id"]
+						if want := "tcp/" + addr + "/" + port; got != want {
+							return fmt.Errorf("virtual service %d has id %s, want %s", i, got, want)
+						}
+					}
+					return nil
+				},
+			},
+		},
+	})
 }

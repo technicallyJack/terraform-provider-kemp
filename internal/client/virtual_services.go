@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 )
 
@@ -53,6 +54,7 @@ type VirtualService struct {
 	RequestRules    []string `json:"RequestRules"` // omitted by the API when empty
 	ResponseRules   []string `json:"ResponseRules"`
 	PreProcessRules []string `json:"PreProcessRules"`
+	MatchBodyRules  []string `json:"MatchBodyRules"` // response body rules; changing the service type clears them
 
 	SubVS []SubVSSlot `json:"SubVS"` // only on parents
 }
@@ -204,25 +206,28 @@ func (c *Client) GetVirtualService(ctx context.Context, index int) (*VirtualServ
 	return &vs, nil
 }
 
-// CreateVirtualService creates a virtual service. Address and Port are
-// required; Protocol defaults to tcp on the LoadMaster.
+// CreateVirtualService creates a virtual service. Address, Port and
+// Protocol are required. The result comes from looking the new virtual
+// service up by those, not from the addvs response, which concurrent creates
+// can get wrong.
 func (c *Client) CreateVirtualService(ctx context.Context, p VirtualServiceParams) (*VirtualService, error) {
+	if p.Address == nil || p.Port == nil || p.Protocol == nil {
+		return nil, fmt.Errorf("address, port and protocol are required to create a virtual service")
+	}
 	params := p.toMap()
-	if p.Address != nil {
-		params["vs"] = *p.Address
-	}
-	if p.Port != nil {
-		params["port"] = *p.Port
-	}
-	if p.Protocol != nil {
-		params["prot"] = *p.Protocol
-	}
+	params["vs"], params["port"], params["prot"] = *p.Address, *p.Port, *p.Protocol
 
-	var vs VirtualService
-	if err := c.Do(ctx, "addvs", params, &vs); err != nil {
+	c.createMu.Lock()
+	defer c.createMu.Unlock()
+	if err := c.Do(ctx, "addvs", params, nil); err != nil {
 		return nil, err
 	}
-	return &vs, nil
+	ref := VSRef{Protocol: *p.Protocol, Address: *p.Address, Port: *p.Port}
+	vs, err := c.ResolveVS(ctx, ref)
+	if IsNotFound(err) {
+		return nil, fmt.Errorf("the LoadMaster reported creating virtual service %s, but it doesn't exist", ref)
+	}
+	return vs, err
 }
 
 // UpdateVirtualService modifies the virtual service with the given index.
