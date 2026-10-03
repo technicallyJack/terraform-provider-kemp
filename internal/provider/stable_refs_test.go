@@ -352,3 +352,15 @@ resource "kemp_virtual_service" "test" {
 		},
 	})
 }
+
+// rsList returns a virtual service's real servers with their status.
+func rsList(t *testing.T, c *client.Client, vsIndex int) []client.RealServer {
+	t.Helper()
+	var out struct {
+		Rs []client.RealServer `json:"Rs"`
+	}
+	if err := c.Do(t.Context(), "showvs", map[string]any{"vs": fmt.Sprint(vsIndex)}, &out); err != nil {
+		t.Fatalf("showvs: %v", err)
+	}
+	return out.Rs
+}

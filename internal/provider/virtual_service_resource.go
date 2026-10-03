@@ -100,6 +100,7 @@ func (r *virtualServiceResource) Schema(_ context.Context, _ resource.SchemaRequ
 
 func (r *virtualServiceResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	resp.Diagnostics.Append(validatePersistence(ctx, req.Config)...)
+	resp.Diagnostics.Append(validateHealthChecks(ctx, req.Config)...)
 	resp.Diagnostics.Append(validateSSL(ctx, req.Config)...)
 }
 
@@ -313,7 +314,13 @@ func (r *virtualServiceResource) ImportState(ctx context.Context, req resource.I
 // applyRules applies the planned SSL settings and rule lists to vs (as just
 // returned by addvs/modvs) and refreshes m from the LoadMaster.
 func (r *virtualServiceResource) applyRules(ctx context.Context, ref client.VSRef, vs *client.VirtualService, m *virtualServiceResourceModel) diag.Diagnostics {
-	diags := applySSL(ctx, r.client, ref, vs, m.SSL)
+	var diags diag.Diagnostics
+	vs, err := applyEnhancedChecks(ctx, r.client, vs, &m.serviceSettingsModel)
+	if err != nil {
+		diags.AddError("Unable to set enhanced health checks", err.Error())
+		return diags
+	}
+	diags = applySSL(ctx, r.client, ref, vs, m.SSL)
 	if diags.HasError() {
 		return diags
 	}

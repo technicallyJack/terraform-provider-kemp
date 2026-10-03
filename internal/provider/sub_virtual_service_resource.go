@@ -108,6 +108,7 @@ func (r *subVirtualServiceResource) Schema(_ context.Context, _ resource.SchemaR
 
 func (r *subVirtualServiceResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	resp.Diagnostics.Append(validatePersistence(ctx, req.Config)...)
+	resp.Diagnostics.Append(validateHealthChecks(ctx, req.Config)...)
 }
 
 func (r *subVirtualServiceResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
@@ -324,6 +325,10 @@ func (r *subVirtualServiceResource) apply(ctx context.Context, m *subVirtualServ
 	}
 	if err := client.CheckSame(ref, vs, parentIndex); err != nil {
 		diags.AddError("SubVS changed unexpectedly", err.Error())
+		return diags
+	}
+	if vs, err = applyEnhancedChecks(ctx, r.client, vs, &m.serviceSettingsModel); err != nil {
+		diags.AddError("Unable to set enhanced health checks", err.Error())
 		return diags
 	}
 

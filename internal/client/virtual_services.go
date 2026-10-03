@@ -15,7 +15,7 @@ type VirtualService struct {
 	VSPort     string `json:"VSPort"`
 	Protocol   string `json:"Protocol"`
 	VSType     string `json:"VStype"`
-	Status     string `json:"Status"`
+	Status     string `json:"Status"` // only reliable from listvs: in showvs the API's own "status" shadows it
 	Enable     bool   `json:"Enable"`
 	MasterVSID int    `json:"MasterVSID"` // parent index for SubVSs, 0 for top-level
 
@@ -26,6 +26,15 @@ type VirtualService struct {
 	CheckHost      string `json:"CheckHost"`   // omitted by the API when empty
 	CheckUseGet    int    `json:"CheckUseGet"` // 0 = HEAD, 1 = GET, 2 = POST
 	CheckUseHTTP11 bool   `json:"CheckUse1.1"`
+
+	ChkInterval          int    `json:"ChkInterval"`   // seconds, 9-120; 0 = global default (can't be set back)
+	ChkTimeout           int    `json:"ChkTimeout"`    // seconds, 4-60; 0 = global default
+	ChkRetryCount        int    `json:"ChkRetryCount"` // 2-15; 0 = global default
+	CheckPattern         string `json:"CheckPattern"`  // omitted when empty
+	CheckPostData        string `json:"CheckPostData"`
+	CheckHeaders         string `json:"CheckHeaders"` // space-separated Name:value pairs
+	EnhancedHealthChecks bool   `json:"EnhancedHealthChecks"`
+	RsMinimum            int    `json:"RsMinimum"` // needs EnhancedHealthChecks; 1 is stored as 0
 
 	Transparent       bool `json:"Transparent"`
 	SubnetOriginating bool `json:"SubnetOriginating"`
@@ -76,6 +85,15 @@ type VirtualServiceParams struct {
 	CheckHost      *string // "" clears it
 	CheckUseGet    *int
 	CheckUseHTTP11 *bool
+
+	ChkInterval          *int
+	ChkTimeout           *int
+	ChkRetryCount        *int
+	CheckPattern         *string // "" clears it
+	CheckPostData        *string
+	CheckHeaders         *string
+	EnhancedHealthChecks *bool
+	RsMinimum            *int
 
 	Transparent       *bool
 	SubnetOriginating *bool
@@ -152,6 +170,24 @@ func (p VirtualServiceParams) toMap() map[string]any {
 			m[k] = *v
 		}
 	}
+	setInt := func(k string, v *int) {
+		if v != nil {
+			m[k] = strconv.Itoa(*v)
+		}
+	}
+	setString := func(k string, v *string) {
+		if v != nil {
+			m[k] = *v
+		}
+	}
+	setInt("ChkInterval", p.ChkInterval)
+	setInt("ChkTimeout", p.ChkTimeout)
+	setInt("ChkRetryCount", p.ChkRetryCount)
+	setString("CheckPattern", p.CheckPattern)
+	setString("CheckPostData", p.CheckPostData)
+	setString("CheckHeaders", p.CheckHeaders)
+	setBool("EnhancedHealthChecks", p.EnhancedHealthChecks)
+	setInt("RsMinimum", p.RsMinimum)
 	setBool("Transparent", p.Transparent)
 	setBool("SubnetOriginating", p.SubnetOriginating)
 	setBool("Cache", p.Cache)

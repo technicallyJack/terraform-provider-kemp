@@ -26,6 +26,15 @@ resource "kemp_virtual_service" "web" {
   check_host       = "web.example.com"
   check_method     = "GET"
   check_use_http11 = true
+  check_interval   = 10
+  check_timeout    = 5
+  check_retries    = 3
+  check_pattern    = "\"status\":\"ok\""
+  check_headers    = { X-Health-Check = "kemp" }
+
+  # Only count the service as up while at least two real servers are healthy.
+  enhanced_health_checks   = true
+  min_healthy_real_servers = 2
 
   # What the real servers see: the client's address in X-Forwarded-For, and
   # connections from the LoadMaster's address on their subnet.
@@ -84,17 +93,25 @@ resource "kemp_header_rule" "server" {
 ### Optional
 
 - `cache` (Boolean) Cache static content on the LoadMaster (http services). Defaults to false.
+- `check_headers` (Map of String) Extra request headers for http/https checks, name to value. Names and values can't contain spaces (the LoadMaster stores them as a space-separated list).
 - `check_host` (String) Host header sent by http/https health checks.
+- `check_interval` (Number) Seconds between health checks, 9-120. If unset, the LoadMaster's current setting is kept; once set it can't go back to the global default (shown as 0).
 - `check_method` (String) HTTP method used by http/https health checks: HEAD, GET or POST. Defaults to HEAD.
 - `check_path` (String) URL path requested by http/https health checks, e.g. /healthz.
+- `check_pattern` (String) For http/https checks, a pattern the response must contain for the real server to count as up. Empty (the default) accepts any successful response.
 - `check_port` (Number) Port to health check. 0 (the default) checks each real server on its own port; otherwise 3-65530.
+- `check_post_data` (String) Body sent by http/https checks when check_method is POST.
+- `check_retries` (Number) Failed checks before a real server is marked down, 2-15. If unset, the LoadMaster's current setting is kept; once set it can't go back to the global default (shown as 0).
+- `check_timeout` (Number) Seconds to wait for a health check response, 4-60. If unset, the LoadMaster's current setting is kept; once set it can't go back to the global default (shown as 0).
 - `check_type` (String) Health check type for the real servers. Defaults to tcp; none disables checks.
 - `check_use_http11` (Boolean) Use HTTP/1.1 for http/https health checks. Defaults to false (HTTP/1.0).
 - `compress` (Boolean) Gzip responses for clients that accept it (http services). Defaults to false.
 - `enabled` (Boolean) Whether the virtual service is enabled. Defaults to true.
+- `enhanced_health_checks` (Boolean) Enable enhanced health check options, needed for min_healthy_real_servers. Defaults to false.
 - `force_l7` (Boolean) Handle gen services at layer 7. Turning it off makes them layer 4, which is always transparent and can't add headers. Other service types are always layer 7. Defaults to true.
 - `forwarded_headers` (String) Headers carrying the client's address to the real servers (layer 7 services): x_forwarded_for, x_forwarded_for_and_via, x_clientside ("client:port -> vip:port"), x_clientside_and_via, via (Via only), none, or legacy (the LoadMaster's default). Defaults to legacy.
 - `idle_timeout` (Number) Seconds an idle connection is kept open, 1-86400. Defaults to 660.
+- `min_healthy_real_servers` (Number) With enhanced_health_checks, the number of real servers that must be up for the virtual service to count as up: 0 (the default, meaning any one) or 2 and up, at most the number of real servers.
 - `nickname` (String) Display name.
 - `persistence` (Attributes) Session persistence. Leave out to turn persistence off. Each mode needs at most one of cookie_name, header_name or query_parameter. (see [below for nested schema](#nestedatt--persistence))
 - `pre_process_rules` (List of String) Names of the rules to evaluate before content switching, typically to set flags, applied in order. Accepts match rules. Reference the rule resources' name attributes so Terraform creates rules before attaching them. Reordering detaches and re-attaches the rules from the first moved one onward, briefly leaving them off; adding rules at the end or removing rules causes no gap.

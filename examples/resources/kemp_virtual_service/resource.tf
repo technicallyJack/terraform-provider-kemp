@@ -11,6 +11,15 @@ resource "kemp_virtual_service" "web" {
   check_host       = "web.example.com"
   check_method     = "GET"
   check_use_http11 = true
+  check_interval   = 10
+  check_timeout    = 5
+  check_retries    = 3
+  check_pattern    = "\"status\":\"ok\""
+  check_headers    = { X-Health-Check = "kemp" }
+
+  # Only count the service as up while at least two real servers are healthy.
+  enhanced_health_checks   = true
+  min_healthy_real_servers = 2
 
   # What the real servers see: the client's address in X-Forwarded-For, and
   # connections from the LoadMaster's address on their subnet.
